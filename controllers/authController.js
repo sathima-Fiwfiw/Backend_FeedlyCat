@@ -92,3 +92,48 @@ exports.login = (req, res) => {
         });
     });
 };
+
+
+// ฟังก์ชันแก้ไขโปรไฟล์
+exports.updateProfile = (req, res) => {
+    const { user_id, name } = req.body;
+    
+    // เช็คว่ามีการส่งไฟล์รูปมาใหม่ไหม?
+    // ถ้ามี: ใช้ลิงค์ใหม่จาก Cloudinary (req.file.path)
+    // ถ้าไม่มี: ให้เป็น null (เดี๋ยวเราจะเขียน logic ไม่ให้ทับของเดิม)
+    const new_img_profile = req.file ? req.file.path : null;
+
+    if (!user_id || !name) {
+        return res.status(400).json({ message: "ข้อมูลไม่ครบถ้วน" });
+    }
+
+    let sql = "";
+    let params = [];
+
+    if (new_img_profile) {
+        // กรณี: เปลี่ยนรูปด้วย (อัปเดตทั้งชื่อและรูป)
+        sql = "UPDATE user SET name = ?, img_profile = ? WHERE user_id = ?";
+        params = [name, new_img_profile, user_id];
+    } else {
+        // กรณี: เปลี่ยนแค่ชื่อ (รูปเดิม)
+        sql = "UPDATE user SET name = ? WHERE user_id = ?";
+        params = [name, user_id];
+    }
+
+    db.query(sql, params, (err, result) => {
+        if (err) {
+            console.error(err);
+            return res.status(500).json({ message: "Database Error" });
+        }
+
+        // ส่งข้อมูลล่าสุดกลับไปให้ Frontend อัปเดตหน้าจอทันที
+        res.json({
+            message: "อัปเดตข้อมูลสำเร็จ!",
+            user: {
+                user_id: user_id,
+                name: name,
+                img_profile: new_img_profile // ถ้าไม่ได้เปลี่ยนรูป ค่านี้จะเป็น null (Frontend ต้องจัดการต่อเอง)
+            }
+        });
+    });
+};

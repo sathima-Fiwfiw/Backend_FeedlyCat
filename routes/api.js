@@ -31,8 +31,7 @@ const upload = multer({ storage: storage });
 // --- Routes ---
 
 router.post('/register', upload.single('image'), authController.register);// POST: http://localhost:3000/api/register
-
 router.post('/login', authController.login);//http://localhost:3000/api/login
-
+router.post('/update-profile', upload.single('image'), authController.updateProfile);
 
 module.exports = router;
