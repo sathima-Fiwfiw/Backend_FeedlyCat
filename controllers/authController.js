@@ -183,7 +183,7 @@ exports.forgotPassword = (req, res) => {
                             <h2 style="color: #4FC3F7; text-align: center;">FeedlyCat 🐱</h2>
                             <hr style="border: 0; border-top: 1px solid #eee;">
                             
-                            <p style="font-size: 16px; color: #333;">สวัสดีครับ,</p>
+                            <p style="font-size: 16px; color: #333;">สวัสดีฮ้ะ,</p>
                             <p style="font-size: 16px; color: #333;">เราได้รับคำขอรีเซ็ตรหัสผ่านสำหรับบัญชีของคุณ นี่คือรหัส OTP ของคุณ:</p>
                             
                             <div style="background-color: #E3F2FD; padding: 15px; text-align: center; border-radius: 10px; margin: 20px 0;">
@@ -194,7 +194,7 @@ exports.forgotPassword = (req, res) => {
                             <p style="font-size: 14px; color: #777;">หากคุณไม่ได้เป็นผู้ร้องขอ กรุณาเพิกเฉยต่ออีเมลฉบับนี้</p>
                             
                             <hr style="border: 0; border-top: 1px solid #eee;">
-                            <p style="font-size: 12px; color: #aaa; text-align: center;">© 2024 FeedlyCat Application</p>
+                            <p style="font-size: 12px; color: #aaa; text-align: center;">FeedlyCat Application</p>
                         </div>
                     `
                 };
