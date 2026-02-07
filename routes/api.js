@@ -32,6 +32,9 @@ const upload = multer({ storage: storage });
 
 router.post('/register', upload.single('image'), authController.register);// POST: http://localhost:3000/api/register
 router.post('/login', authController.login);//http://localhost:3000/api/login
-router.post('/update-profile', upload.single('image'), authController.updateProfile);
+router.post('/update-profile', upload.single('image'), authController.updateProfile);// อัพเดทรูปโปรไฟล์ + ข้อมูลอื่นๆ
+router.post('/forgot-password', authController.forgotPassword);// ส่ง OTP
+router.post('/reset-password', authController.resetPassword);// ตั้งรหัสผ่านใหม่
+router.post('/change-password', authController.changePassword);// เปลี่ยนรหัสผ่าน (ต้องล็อกอินอยู่แล้ว)
 
 module.exports = router;
