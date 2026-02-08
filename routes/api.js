@@ -8,6 +8,8 @@ const { CloudinaryStorage } = require('multer-storage-cloudinary');
 
 // Import Controller
 const authController = require('../controllers/authController');
+const devicesController = require('../controllers/devicesController');
+const catController = require('../controllers/catController');
 
 // Cloudinary
 cloudinary.config({
@@ -36,5 +38,8 @@ router.post('/update-profile', upload.single('image'), authController.updateProf
 router.post('/forgot-password', authController.forgotPassword);// ส่ง OTP
 router.post('/reset-password', authController.resetPassword);// ตั้งรหัสผ่านใหม่
 router.post('/change-password', authController.changePassword);// เปลี่ยนรหัสผ่าน (ต้องล็อกอินอยู่แล้ว)
+router.post('/add-device', devicesController.addDevice);// เพิ่มอุปกรณ์ใหม่
+router.get('/devices/:user_id', devicesController.getDevices); // เส้นนี้ใช้ดึงข้อมูลมาโชว์
+router.post('/add-cat', catController.addCat);// เพิ่มข้อมูลแมว
 
 module.exports = router;

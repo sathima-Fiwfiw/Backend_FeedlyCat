@@ -1,38 +1,20 @@
-//ไฟล์นี้จะเก็บ Function การทำงานต่างๆ เอาไว้ (Logic ล้วนๆ) เก็บแมวทั้งหมด, ดึงประวัติการกิน, สั่งให้อาหาร (Logic เกี่ยวกับแมว)
-
 const db = require('../config/db');
 
-// ดึงรายชื่อแมวทั้งหมด
-exports.getAllCats = (req, res) => {
-    const sql = 'SELECT * FROM cats';
-    db.query(sql, (err, results) => {
+// เพิ่มข้อมูลแมว
+exports.addCat = (req, res) => {
+    const { user_id, name_cat, birthday } = req.body;
+
+    if (!user_id || !name_cat) {
+        return res.status(400).json({ message: "ข้อมูลแมวไม่ครบถ้วน" });
+    }
+
+    // เพิ่มลงตาราง cats
+    const sql = "INSERT INTO cats (user_id, name_cat, birthday) VALUES (?, ?, ?)";
+    db.query(sql, [user_id, name_cat, birthday], (err, result) => {
         if (err) {
             console.error(err);
-            return res.status(500).json({ error: 'Database Error' });
+            return res.status(500).json({ message: "เพิ่มข้อมูลแมวไม่สำเร็จ" });
         }
-        res.json(results);
-    });
-};
-
-// ดึงประวัติการกิน
-exports.getFeedingLogs = (req, res) => {
-    const sql = 'SELECT * FROM feeding_logs ORDER BY timestamp DESC LIMIT 20';
-    db.query(sql, (err, results) => {
-        if (err) return res.status(500).json(err);
-        res.json(results);
-    });
-};
-
-// สั่งให้อาหาร
-exports.feedCat = (req, res) => {
-    const { amount } = req.body;
-    console.log(`📝 ได้รับคำสั่งให้อาหาร: ${amount} กรัม`);
-    
-    // (อนาคตใส่ Logic MQTT หรือ Insert Log ตรงนี้)
-
-    res.json({ 
-        message: 'รับคำสั่งเรียบร้อย (จำลอง)', 
-        amount: amount, 
-        status: 'processing' 
+        res.json({ message: "เพิ่มข้อมูลแมวสำเร็จ" });
     });
 };
