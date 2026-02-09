@@ -41,5 +41,7 @@ router.post('/change-password', authController.changePassword);// เปลี�
 router.post('/add-device', devicesController.addDevice);// เพิ่มอุปกรณ์ใหม่
 router.get('/devices/:user_id', devicesController.getDevices); // เส้นนี้ใช้ดึงข้อมูลมาโชว์
 router.post('/add-cat', catController.addCat);// เพิ่มข้อมูลแมว
+router.post('/update-device', devicesController.updateDevice);//แก้ไขข้อมูลอุปกรณ์
+router.post('/update-cat', catController.updateCat);//แก้ไขข้อมูลแมว
 
 module.exports = router;
