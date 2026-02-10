@@ -11,6 +11,7 @@ const authController = require('../controllers/authController');
 const devicesController = require('../controllers/devicesController');
 const catController = require('../controllers/catController');
 const timerController = require('../controllers/timerController'); //เวลาที่เกี่ยวกับการตั้งเวลา (Schedule) จะอยู่ในนี้
+const notificationController = require('../controllers/notificationController');// แจ้งเตือนต่างๆ
 
 // Cloudinary
 cloudinary.config({
@@ -36,17 +37,25 @@ const upload = multer({ storage: storage });
 router.post('/register', upload.single('image'), authController.register);// POST: http://localhost:3000/api/register
 router.post('/login', authController.login);//http://localhost:3000/api/login
 router.post('/update-profile', upload.single('image'), authController.updateProfile);// อัพเดทรูปโปรไฟล์ + ข้อมูลอื่นๆ
+
 router.post('/forgot-password', authController.forgotPassword);// ส่ง OTP
 router.post('/reset-password', authController.resetPassword);// ตั้งรหัสผ่านใหม่
 router.post('/change-password', authController.changePassword);// เปลี่ยนรหัสผ่าน (ต้องล็อกอินอยู่แล้ว)
+
 router.post('/add-device', devicesController.addDevice);// เพิ่มอุปกรณ์ใหม่
 router.get('/devices/:user_id', devicesController.getDevices); // เส้นนี้ใช้ดึงข้อมูลมาโชว์
-router.post('/add-cat', catController.addCat);// เพิ่มข้อมูลแมว
 router.post('/update-device', devicesController.updateDevice);//แก้ไขข้อมูลอุปกรณ์
+
+router.post('/add-cat', upload.single('image'), catController.addCat);//รูปแมว
+router.get('/cats/:user_id', catController.getCats);
 router.post('/update-cat', catController.updateCat);//แก้ไขข้อมูลแมว
+
 router.post('/add-schedule', timerController.addSchedule);        // เพิ่มเวลา
 router.get('/schedules/:device_id', timerController.getSchedules); // ดึงเวลาทั้งหมดของเครื่อง
 router.post('/delete-schedule', timerController.deleteSchedule);  // ลบเวลา
 router.post('/toggle-schedule', timerController.toggleSchedule);  // เปิด/ปิดเวลา
+
+router.post('/add-notification', notificationController.addNotification);// เพิ่มการแจ้งเตือน
+router.get('/notifications/:user_id', notificationController.getNotifications);// ดึงการแจ้งเตือนทั้งหมดขอแมว
 
 module.exports = router;
