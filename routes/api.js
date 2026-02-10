@@ -10,6 +10,7 @@ const { CloudinaryStorage } = require('multer-storage-cloudinary');
 const authController = require('../controllers/authController');
 const devicesController = require('../controllers/devicesController');
 const catController = require('../controllers/catController');
+const timerController = require('../controllers/timerController'); //เวลาที่เกี่ยวกับการตั้งเวลา (Schedule) จะอยู่ในนี้
 
 // Cloudinary
 cloudinary.config({
@@ -43,5 +44,9 @@ router.get('/devices/:user_id', devicesController.getDevices); // เส้น�
 router.post('/add-cat', catController.addCat);// เพิ่มข้อมูลแมว
 router.post('/update-device', devicesController.updateDevice);//แก้ไขข้อมูลอุปกรณ์
 router.post('/update-cat', catController.updateCat);//แก้ไขข้อมูลแมว
+router.post('/add-schedule', timerController.addSchedule);        // เพิ่มเวลา
+router.get('/schedules/:device_id', timerController.getSchedules); // ดึงเวลาทั้งหมดของเครื่อง
+router.post('/delete-schedule', timerController.deleteSchedule);  // ลบเวลา
+router.post('/toggle-schedule', timerController.toggleSchedule);  // เปิด/ปิดเวลา
 
 module.exports = router;
