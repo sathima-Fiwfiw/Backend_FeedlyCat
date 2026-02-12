@@ -59,3 +59,21 @@ exports.updateDevice = (req, res) => {
         res.json({ message: "แก้ไขอุปกรณ์สำเร็จ" });
     });
 };
+
+// ลบอุปกรณ์
+exports.deleteDevice = (req, res) => {
+    const { id } = req.body; // รับ ID ของแถวใน Database (ไม่ใช่ device_id ที่เป็น string)
+
+    if (!id) {
+        return res.status(400).json({ message: "ไม่พบ ID ที่ต้องการลบ" });
+    }
+
+    const sql = "DELETE FROM devices WHERE id = ?";
+    db.query(sql, [id], (err, result) => {
+        if (err) {
+            console.error("Error deleting device:", err);
+            return res.status(500).json({ message: "ลบอุปกรณ์ไม่สำเร็จ" });
+        }
+        res.json({ message: "ลบอุปกรณ์สำเร็จ" });
+    });
+};

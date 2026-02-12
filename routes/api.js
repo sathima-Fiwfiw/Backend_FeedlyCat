@@ -45,10 +45,12 @@ router.post('/change-password', authController.changePassword);// เปลี�
 router.post('/add-device', devicesController.addDevice);// เพิ่มอุปกรณ์ใหม่
 router.get('/devices/:user_id', devicesController.getDevices); // เส้นนี้ใช้ดึงข้อมูลมาโชว์
 router.post('/update-device', devicesController.updateDevice);//แก้ไขข้อมูลอุปกรณ์
+router.post('/delete-device', devicesController.deleteDevice);//ลบอุปกรณ์
 
 router.post('/add-cat', upload.single('image'), catController.addCat);//รูปแมว
 router.get('/cats/:user_id', catController.getCats);
-router.post('/update-cat', catController.updateCat);//แก้ไขข้อมูลแมว
+router.post('/update-cat', upload.single('image'), catController.updateCat);//แก้ไขข้อมูลแมว
+router.post('/delete-cat', catController.deleteCat); // เส้นสำหรับลบแมว
 
 router.post('/add-schedule', timerController.addSchedule);        // เพิ่มเวลา
 router.get('/schedules/:device_id', timerController.getSchedules); // ดึงเวลาทั้งหมดของเครื่อง
