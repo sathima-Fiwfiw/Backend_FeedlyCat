@@ -59,5 +59,6 @@ router.post('/toggle-schedule', timerController.toggleSchedule);  // เปิ�
 
 router.post('/add-notification', notificationController.addNotification);// เพิ่มการแจ้งเตือน
 router.get('/notifications/:user_id', notificationController.getNotifications);// ดึงการแจ้งเตือนทั้งหมดขอแมว
+router.post('/mark-read', notificationController.markAsRead); // ฟังก์ชันกดอ่านแล้ว (เคลียร์ตัวเลข)
 
 module.exports = router;
