@@ -1,79 +1,98 @@
 const db = require('../config/db');
+const { sendCommand, checkDeviceOnline } = require('../config/mqtt'); 
 
-// เพิ่มอุปกรณ์ใหม่
-exports.addDevice = (req, res) => {
+// ✅ เพิ่มอุปกรณ์: ตรวจสอบเครื่องซ้ำ -> ตรวจสอบ Hardware ID จริง -> บันทึก
+exports.addDevice = async (req, res) => {
     const { user_id, device_id, name } = req.body;
 
-    if (!user_id || !device_id || !name) {
-        return res.status(400).json({ message: "ข้อมูลอุปกรณ์ไม่ครบถ้วน" });
+    try {
+        // 1. ตรวจสอบในฐานข้อมูลก่อนว่ารหัสเครื่องนี้ถูกเพิ่มไปแล้วหรือยัง
+        const checkSql = "SELECT id FROM devices WHERE device_id = ?";
+        db.query(checkSql, [device_id], async (err, results) => {
+            if (err) {
+                console.error(err);
+                return res.status(500).json({ message: "เกิดข้อผิดพลาดในการตรวจสอบฐานข้อมูล" });
+            }
+
+            if (results.length > 0) {
+                // ❌ ถ้ามีเครื่องนี้ในระบบแล้ว ให้แจ้งเตือนและหยุดการทำงาน
+                return res.status(400).json({ 
+                    message: "รหัสเครื่องนี้ถูกลงทะเบียนในระบบแล้ว ไม่สามารถเพิ่มซ้ำได้" 
+                });
+            }
+
+            // 2. ถ้ายังไม่มีใครใช้ ค่อยส่ง PING ไปหา Arduino เพื่อเช็คว่าเครื่องมีอยู่จริงและออนไลน์
+            try {
+                const isOnline = await checkDeviceOnline(device_id); 
+
+                if (!isOnline) {
+                    // ❌ ถ้า Arduino ไม่ตอบ (ID ผิด หรือ ไม่ได้เสียบปลั๊ก/ต่อเน็ต)
+                    return res.status(404).json({ 
+                        message: "ไม่มีเครื่อง ID นี้อยู่ หรือเครื่องไม่ได้เชื่อมต่อ" 
+                    });
+                }
+
+                // 3. ✅ ถ้าผ่านการตรวจสอบทั้งหมด จึงจะบันทึกลง Table devices
+                const insertSql = "INSERT INTO devices (user_id, device_id, name, status) VALUES (?, ?, ?, 'online')";
+                db.query(insertSql, [user_id, device_id, name], (err, result) => {
+                    if (err) return res.status(500).json({ message: "บันทึกข้อมูลไม่สำเร็จ" });
+                    res.json({ message: "เพิ่มอุปกรณ์สำเร็จ!", id: result.insertId });
+                });
+
+            } catch (mqttError) {
+                console.error("MQTT Error:", mqttError);
+                res.status(500).json({ message: "เกิดข้อผิดพลาดในการเชื่อมต่อกับเครื่อง" });
+            }
+        });
+
+    } catch (error) {
+        console.error("System Error:", error);
+        res.status(500).json({ message: "เกิดข้อผิดพลาดของระบบ" });
     }
-
-    // เพิ่มลงตาราง devices
-    const sql = "INSERT INTO devices (user_id, device_id, name, status) VALUES (?, ?, ?, 'offline')";
-    db.query(sql, [user_id, device_id, name], (err, result) => {
-        if (err) {
-            console.error(err);
-            return res.status(500).json({ message: "เพิ่มอุปกรณ์ไม่สำเร็จ (อาจมี ID นี้ซ้ำในระบบ)" });
-        }
-        res.json({ message: "เพิ่มอุปกรณ์สำเร็จ", id: result.insertId });
-    });
 };
-
-// ดึงรายการอุปกรณ์ของผู้ใช้ (เพื่อให้หน้า DevicePage แสดงผลได้)
+// ✅ ดึงรายการอุปกรณ์: แสดงชื่อแมวที่ผูกกับ User นั้นๆ
 exports.getDevices = (req, res) => {
     const { user_id } = req.params;
-
-    // แก้ SQL เป็นแบบ Subquery (ปลอดภัยจาก Error GROUP BY)
     const sql = `
-        SELECT 
-            devices.*, 
-            (SELECT name_cat FROM cats WHERE cats.user_id = devices.user_id LIMIT 1) AS name_cat,
-            (SELECT birthday FROM cats WHERE cats.user_id = devices.user_id LIMIT 1) AS birthday
-        FROM devices 
-        WHERE devices.user_id = ?
-    `;
-
+        SELECT devices.*, 
+            (SELECT name_cat FROM cats WHERE cats.user_id = devices.user_id LIMIT 1) AS name_cat 
+        FROM devices WHERE devices.user_id = ?`;
     db.query(sql, [user_id], (err, results) => {
-        if (err) {
-            console.error("Database Error:", err); // ถ้ามี error ให้โชว์ใน Terminal ด้วย
-            return res.status(500).json({ message: "Database Error" });
-        }
+        if (err) return res.status(500).json({ message: "Database Error" });
         res.json(results);
     });
 };
 
-// ฟังก์ชันแก้ไขข้อมูลอุปกรณ์
+// ✅ แก้ไขข้อมูลอุปกรณ์
 exports.updateDevice = (req, res) => {
-    const { id, device_id, name } = req.body; // id คือ Primary Key ของตาราง (ไม่ใช่ device_id ที่เราตั้งเอง)
-
-    if (!id || !device_id || !name) {
-        return res.status(400).json({ message: "ข้อมูลไม่ครบถ้วน" });
-    }
-
+    const { id, device_id, name } = req.body;
     const sql = "UPDATE devices SET device_id = ?, name = ? WHERE id = ?";
     db.query(sql, [device_id, name, id], (err, result) => {
-        if (err) {
-            console.error(err);
-            return res.status(500).json({ message: "แก้ไขอุปกรณ์ไม่สำเร็จ" });
-        }
-        res.json({ message: "แก้ไขอุปกรณ์สำเร็จ" });
+        if (err) return res.status(500).json({ message: "แก้ไขไม่สำเร็จ" });
+        res.json({ message: "แก้ไขสำเร็จ" });
     });
 };
 
-// ลบอุปกรณ์
+// ✅ ลบอุปกรณ์
 exports.deleteDevice = (req, res) => {
-    const { id } = req.body; // รับ ID ของแถวใน Database (ไม่ใช่ device_id ที่เป็น string)
-
-    if (!id) {
-        return res.status(400).json({ message: "ไม่พบ ID ที่ต้องการลบ" });
-    }
-
+    const { id } = req.body;
     const sql = "DELETE FROM devices WHERE id = ?";
     db.query(sql, [id], (err, result) => {
-        if (err) {
-            console.error("Error deleting device:", err);
-            return res.status(500).json({ message: "ลบอุปกรณ์ไม่สำเร็จ" });
+        if (err) return res.status(500).json({ message: "ลบไม่สำเร็จ" });
+        res.json({ message: "ลบสำเร็จ" });
+    });
+};
+
+// ✅ สั่งให้อาหาร: ดึง device_id จาก DB มาใช้ส่ง MQTT
+exports.feedDevice = (req, res) => {
+    const { id } = req.body; 
+    const sql = "SELECT device_id FROM devices WHERE id = ?";
+    db.query(sql, [id], (err, results) => {
+        if (err || results.length === 0) {
+            return res.status(404).json({ message: "ไม่พบอุปกรณ์นี้ในระบบ" });
         }
-        res.json({ message: "ลบอุปกรณ์สำเร็จ" });
+        const targetDeviceId = results[0].device_id; 
+        sendCommand(targetDeviceId, 'FEED_NOW'); //
+        res.json({ message: `สั่งเครื่อง ${targetDeviceId} ทำงานแล้ว!` });
     });
 };
