@@ -4,8 +4,10 @@ require('dotenv').config();
 const express = require('express');
 const cors = require('cors');
 
-// 1. เรียกใช้ไฟล์ MQTT ที่เราเพิ่งสร้าง
-const mqttClient = require('./config/mqtt');
+// 1. เรียกใช้ไฟล์ MQTT ที่เราเพิ่งสร้าง ใช้เพื่อเชื่อมต่อกับ MQTT Broker และรอรับข้อมูลจาก Arduino
+//const mqttClient = require('./config/mqtt');
+
+const { client: mqttClient } = require('./config/mqtt');
 
 // Import Route ที่เราสร้างไว้
 const apiRoutes = require('./routes/api');
@@ -48,5 +50,5 @@ app.listen(PORT, () => {
     console.log(`🚀 Server running on port ${PORT}`);
     
     // (Optional) ถ้าอยากให้ส่งทันทีที่เปิด Server ให้เอา Comment ออก:
-    // mqttClient.publish('cat/feeder/command', 'SERVER_STARTUP_CHECK');
+    mqttClient.publish('cat/feeder/command', 'SERVER_STARTUP_CHECK');
 });
