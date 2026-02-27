@@ -4,28 +4,19 @@ const nodemailer = require('nodemailer'); // ลืมรหัสผ่าน
 exports.register = (req, res) => {
     const { name, email, password, phone } = req.body;
     
-    // เปลี่ยนจาก .filename เป็น .path
-    // ถ้ามีรูป -> เอาลิงค์จาก Cloudinary (req.file.path)
-    // ถ้าไม่มี -> ให้เป็น null
     const img_profile = req.file ? req.file.path : null;
-
-    // --- (ด้านล่างนี้เหมือนเดิม) --- 
     if (!name || !email || !password || !phone) {
         return res.status(400).json({ message: "กรุณากรอกข้อมูลให้ครบทุกช่อง" });
     }
-
     if (password.length < 6) {
         return res.status(400).json({ message: "รหัสผ่านต้องมีอย่างน้อย 6 ตัวอักษร" });
     }
-
     const checkSql = "SELECT * FROM user WHERE email = ? OR phone = ?";
-    
     db.query(checkSql, [email, phone], (err, results) => {
         if (err) {
             console.error(err);
             return res.status(500).json({ message: "Database Error" });
         }
-
         if (results.length > 0) {
             const existingUser = results[0];
             if (existingUser.email === email) {
@@ -35,10 +26,7 @@ exports.register = (req, res) => {
                 return res.status(400).json({ message: "เบอร์โทรศัพท์นี้ถูกใช้งานแล้ว" });
             }
         }
-
-        // บันทึกลง Database (รวม img_profile)
         const insertSql = "INSERT INTO user (name, email, password, phone, img_profile) VALUES (?, ?, ?, ?, ?)";
-        
         db.query(insertSql, [name, email, password, phone, img_profile], (err, result) => {
             if (err) {
                 console.error(err);
@@ -49,37 +37,40 @@ exports.register = (req, res) => {
                 message: "สมัครสมาชิกเรียบร้อย!",
                 user_id: result.insertId,
                 name: name,
-                img_profile: img_profile // ส่งลิงค์รูปกลับไปให้ดูเล่นๆ ด้วย
+                img_profile: img_profile 
             });
         });
     });
 };
 
-// ... ส่วน Login (ใช้ของเดิมได้เลยครับ หรือจะเพิ่มให้ส่ง img_profile กลับไปตามที่ผมเคยแนะนำก็ได้) ...
+// Login 
 exports.login = (req, res) => {
     const { email, password } = req.body;
 
     if (!email || !password) {
-        return res.status(400).send("กรุณากรอก Email และ Password");
+        // แก้จาก .send เป็น .json
+        return res.status(400).json({ message: "กรุณากรอก Email และ Password" });
     }
 
     const sql = "SELECT * FROM user WHERE email = ?";
     db.query(sql, [email], (err, results) => {
         if (err) {
             console.error(err);
-            return res.status(500).send("Database Error");
+            // แก้ตรงนี้สำคัญมาก!
+            return res.status(500).json({ message: "Database Error" });
         }
 
         if (results.length === 0) {
-            return res.status(401).send("ไม่พบอีเมลนี้ในระบบ");
+            // แก้จาก .send เป็น .json
+            return res.status(401).json({ message: "ไม่พบอีเมลนี้ในระบบ" });
         }
 
         const user = results[0];
 
         if (password !== user.password) {
-            return res.status(401).send("รหัสผ่านไม่ถูกต้อง");
+            // แก้จาก .send เป็น .json
+            return res.status(401).json({ message: "รหัสผ่านไม่ถูกต้อง" });
         }
-
         res.json({
             message: "เข้าสู่ระบบสำเร็จ!",
             user: {
@@ -87,7 +78,7 @@ exports.login = (req, res) => {
                 name: user.name,
                 email: user.email,
                 phone: user.phone,
-                img_profile: user.img_profile // [แนะนำ] ส่งรูปกลับไปตอน Login ด้วย
+                img_profile: user.img_profile 
             }
         });
     });
@@ -120,12 +111,13 @@ exports.updateProfile = (req, res) => {
         params = [name, user_id];
     }
 
-    db.query(sql, params, (err, result) => {
-        if (err) {
-            console.error(err);
-            return res.status(500).json({ message: "Database Error" });
-        }
-
+  db.query(sql, [email], (err, results) => {
+    if (err) {
+        console.error(err);
+        // ❌ ของเดิม: return res.status(500).send("Database Error");
+        // ✅ เปลี่ยนเป็น:
+        return res.status(500).json({ message: "Database Error" });
+    }
         // ส่งข้อมูลล่าสุดกลับไปให้ Frontend อัปเดตหน้าจอทันที
         res.json({
             message: "อัปเดตข้อมูลสำเร็จ!",
@@ -142,41 +134,33 @@ exports.updateProfile = (req, res) => {
 exports.forgotPassword = (req, res) => {
     // 1. รับค่า email มาเป็นอันดับแรกสุด! (สำคัญมาก)
     const { email } = req.body;
-
     if (!email) {
         return res.status(400).send("กรุณากรอกอีเมล");
     }
-
     // 2. เช็คว่ามี User อีเมลนี้ในระบบไหม?
     db.query("SELECT * FROM user WHERE email = ?", [email], (err, results) => {
         if (err) return res.status(500).send("Database Error");
         if (results.length === 0) return res.status(404).send("ไม่พบอีเมลนี้ในระบบ");
-
         // 3. สร้าง OTP สุ่ม 6 หลัก
         const token = Math.floor(100000 + Math.random() * 900000).toString();
-
         // 4. ลบ Token เก่าทิ้งก่อน (ถ้ามี)
         db.query("DELETE FROM password_resets WHERE email = ?", [email], (err) => {
             if (err) console.log(err);
-
             // 5. บันทึก Token ใหม่ลง Database
             const insertSql = "INSERT INTO password_resets (email, token) VALUES (?, ?)";
             db.query(insertSql, [email, token], (err) => {
                 if (err) return res.status(500).send("สร้าง Token ไม่สำเร็จ");
-
                 // 6. ตั้งค่าคนส่ง (Transporter)
                 const transporter = nodemailer.createTransport({
                     service: 'gmail',
                     auth: {
-                        user: 'feedlycat@gmail.com',  // อีเมลของคุณ
-                        pass: 'mfeoaceujplpizec'      // รหัส App Password ของคุณ
+                        user: 'feedlycat@gmail.com',  
+                        pass: 'mfeoaceujplpizec'     
                     }
                 });
-
-                // 7. ตั้งค่าเนื้อหาอีเมล (ต้องทำหลังจากได้ email และ token แล้ว)
                 const mailOptions = {
                     from: 'FeedlyCat App <feedlycat@gmail.com>', // ชื่อผู้ส่ง
-                    to: email, // ตัวแปรนี้มีค่าแล้ว เพราะประกาศไว้บนสุด
+                    to: email, 
                     subject: 'รหัส OTP สำหรับรีเซ็ตรหัสผ่าน (FeedlyCat)',
                     html: `
                         <div style="font-family: 'Sarabun', sans-serif; max-width: 500px; margin: auto; padding: 20px; border: 1px solid #ddd; border-radius: 10px; background-color: #ffffff;">
@@ -198,7 +182,6 @@ exports.forgotPassword = (req, res) => {
                         </div>
                     `
                 };
-
                 // 8. ส่งเมล
                 transporter.sendMail(mailOptions, (error, info) => {
                     if (error) {
@@ -219,9 +202,6 @@ exports.resetPassword = (req, res) => {
     if (!email || !token || !newPassword) {
         return res.status(400).send("ข้อมูลไม่ครบถ้วน");
     }
-
-    // 1. ตรวจสอบ Token ในตาราง password_resets
-    // ต้องตรงทั้ง Email, Token และ เวลาต้องไม่เกิน 15 นาที (900 วินาที)
     const sql = `SELECT * FROM password_resets 
                  WHERE email = ? 
                  AND token = ? 
@@ -239,7 +219,7 @@ exports.resetPassword = (req, res) => {
         db.query(updateSql, [newPassword, email], (err) => {
             if (err) return res.status(500).send("Update Password Error");
 
-            // 3. ลบ Token ทิ้งทันทีเมื่อใช้เสร็จแล้ว (เพื่อความปลอดภัย)
+            // 3. ลบ Token ทิ้งทันทีเมื่อใช้เสร็จแล้ว
             db.query("DELETE FROM password_resets WHERE email = ?", [email], (err) => {
                 res.json({ message: "เปลี่ยนรหัสผ่านสำเร็จ! กรุณาเข้าสู่ระบบใหม่" });
             });

@@ -3,7 +3,7 @@
 require('dotenv').config();
 const mysql = require('mysql2');
 
-// สร้าง Connection Pool
+// ในไฟล์ db.js
 const db = mysql.createPool({
     host: process.env.DB_HOST,
     user: process.env.DB_USER,
@@ -12,7 +12,9 @@ const db = mysql.createPool({
     port: process.env.DB_PORT,
     waitForConnections: true,
     connectionLimit: 10,
-    queueLimit: 0
+    queueLimit: 0,
+    timezone: '+07:00', // กำหนด Timezone เป็นเวลาไทย
+    dateStrings: true   // บังคับให้คืนค่า Date/DateTime กลับมาเป็น String เลย
 });
 
 // เช็คการเชื่อมต่อตอนเริ่มต้น (Optional)

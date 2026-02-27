@@ -103,9 +103,25 @@ exports.updateCat = (req, res) => {
     });
 };
 // ดึงข้อมูลแมว
+// ในไฟล์ catController.js
 exports.getCats = (req, res) => {
     const { user_id } = req.params;
-    const sql = "SELECT * FROM cats WHERE user_id = ?";
+    
+    // --- [จุดแก้ไข] ใช้ DATE_FORMAT ห่อฟิลด์ birthday ---
+    const sql = `
+        SELECT 
+            cat_id, 
+            user_id, 
+            name_cat, 
+            DATE_FORMAT(birthday, '%Y-%m-%d') as birthday, 
+            gender, 
+            rfid_tag, 
+            note, 
+            image 
+        FROM cats 
+        WHERE user_id = ?
+    `;
+
     db.query(sql, [user_id], (err, results) => {
         if (err) return res.status(500).json({ message: "Database Error" });
         res.json(results);
