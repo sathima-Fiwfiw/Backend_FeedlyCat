@@ -28,7 +28,8 @@ app.get('/', (req, res) => {
 // ---------------------------------------------------------
 app.get('/test-feed', (req, res) => {
     // ส่งคำสั่งไปที่เครื่องให้อาหาร
-    mqttClient.publish('cat/feeder/command', 'FEED_NOW');
+    //mqttClient.publish('cat/feeder/command', 'FEED_NOW');
+    mqttClient.client.publish('cat/feeder/command', 'FEED_NOW'); //ใช้เมื่อขึ้นโอส
     
     console.log('🐱 Command sent: FEED_NOW');
     res.send('ส่งคำสั่งให้อาหารแมวเรียบร้อยแล้ว! (Check Console)');

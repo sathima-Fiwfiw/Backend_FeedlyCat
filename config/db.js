@@ -14,7 +14,10 @@ const db = mysql.createPool({
     connectionLimit: 10,
     queueLimit: 0,
     timezone: '+07:00', // กำหนด Timezone เป็นเวลาไทย
-    dateStrings: true   // บังคับให้คืนค่า Date/DateTime กลับมาเป็น String เลย
+    dateStrings: true,  // บังคับให้คืนค่า Date/DateTime กลับมาเป็น String เลย
+
+    enableKeepAlive: true,
+    keepAliveInitialDelay: 0
 });
 
 // เช็คการเชื่อมต่อตอนเริ่มต้น (Optional)
