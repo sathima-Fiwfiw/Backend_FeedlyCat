@@ -1,13 +1,15 @@
-// server.js
-
 require('dotenv').config();
 const express = require('express');
 const cors = require('cors');
 
-// 1. เรียกใช้ไฟล์ MQTT ที่เราเพิ่งสร้าง ใช้เพื่อเชื่อมต่อกับ MQTT Broker และรอรับข้อมูลจาก Arduino
-//const mqttClient = require('./config/mqtt');
+// ✅ เพิ่มไลบรารีสำหรับจัดการเวลา
+const cron = require('node-cron');
+const moment = require('moment');
 
-const { client: mqttClient } = require('./config/mqtt');
+// ✅ เรียกใช้ไฟล์ MQTT โดยดึงมาทั้ง client และ sendCommand
+const { client: mqttClient, sendCommand } = require('./config/mqtt');
+// ✅ เรียกใช้ฐานข้อมูลสำหรับ Query หาเวลา
+const db = require('./config/db');
 
 require('./iot/mqttHandler'); // เรียกใช้ Handler ที่เราสร้างไว้เพื่อจัดการข้อมูลจาก Arduino
 
@@ -32,25 +34,53 @@ app.get('/', (req, res) => {
 });
 
 // ---------------------------------------------------------
-// ✅ เพิ่ม: Route พิเศษสำหรับทดสอบสั่งเครื่องให้อาหาร (กดผ่านเว็บได้เลย)
-// ลองเข้าผ่าน Browser: http://localhost:3000/test-feed
+// Route พิเศษสำหรับทดสอบสั่งเครื่องให้อาหาร (กดผ่านเว็บได้เลย)
 // ---------------------------------------------------------
 app.get('/test-feed', (req, res) => {
-    // ส่งคำสั่งไปที่เครื่องให้อาหาร
-    //mqttClient.publish('cat/feeder/command', 'FEED_NOW');
-    mqttClient.client.publish('cat/feeder/command', 'FEED_NOW'); //ใช้เมื่อขึ้นโอส
+    mqttClient.publish('cat/feeder/command', 'FEED_NOW'); 
     
     console.log('🐱 Command sent: FEED_NOW');
     res.send('ส่งคำสั่งให้อาหารแมวเรียบร้อยแล้ว! (Check Console)');
 });
+
+// ---------------------------------------------------------
+// ✅ ระบบตั้งเวลาให้อาหารอัตโนมัติ (Scheduler)
+// ทำงานทุกๆ 1 นาที
+// ---------------------------------------------------------
+cron.schedule('* * * * *', () => {
+    const now = moment();
+    const currentTime = now.format('HH:mm'); // ดึงเวลาปัจจุบัน เช่น 14:30
+    const currentDay = now.format('ddd').toUpperCase().substring(0, 2); // ดึงชื่อวันสั้นๆ เช่น MO, TU
+
+    console.log(`⏰ Checking schedule for: ${currentTime} (${currentDay})`);
+
+    // ค้นหา Schedule ที่ตรงกับเวลาปัจจุบัน และเปิดใช้งานอยู่ (is_active = 1)
+    const sql = "SELECT * FROM schedules WHERE `time` = ? AND is_active = 1";
+    
+    db.query(sql, [currentTime], (err, results) => {
+        if (err) return console.error("❌ Scheduler Error:", err);
+
+        results.forEach(schedule => {
+            const repeat = schedule.repeat; // เช่น "Everyday" หรือ "MO,WE,FR"
+            
+            // ตรวจสอบเงื่อนไขวัน
+            const isToday = repeat === 'Everyday' || repeat.includes(currentDay);
+
+            if (isToday) {
+                console.log(`🚀 Triggering Feed: Device ${schedule.device_id}, Portion ${schedule.portion}g`);
+                
+                // ส่งคำสั่งไปที่ MQTT ให้เครื่องจ่ายอาหาร
+                sendCommand(schedule.device_id, "FEED_NOW"); 
+            }
+        });
+    });
+});
 // ---------------------------------------------------------
 
-
-//const PORT =  3000;
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
     console.log(`🚀 Server running on port ${PORT}`);
     
     // (Optional) ถ้าอยากให้ส่งทันทีที่เปิด Server ให้เอา Comment ออก:
-    mqttClient.publish('cat/feeder/command', 'SERVER_STARTUP_CHECK');
+    // mqttClient.publish('cat/feeder/command', 'SERVER_STARTUP_CHECK');
 });
