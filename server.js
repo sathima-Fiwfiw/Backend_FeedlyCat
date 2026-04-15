@@ -9,6 +9,8 @@ const cors = require('cors');
 
 const { client: mqttClient } = require('./config/mqtt');
 
+require('./iot/mqttHandler'); // เรียกใช้ Handler ที่เราสร้างไว้เพื่อจัดการข้อมูลจาก Arduino
+
 // Import Route ที่เราสร้างไว้
 const apiRoutes = require('./routes/api');
 

@@ -48,7 +48,6 @@ exports.login = (req, res) => {
     const { email, password } = req.body;
 
     if (!email || !password) {
-        // แก้จาก .send เป็น .json
         return res.status(400).json({ message: "กรุณากรอก Email และ Password" });
     }
 
@@ -56,19 +55,16 @@ exports.login = (req, res) => {
     db.query(sql, [email], (err, results) => {
         if (err) {
             console.error(err);
-            // แก้ตรงนี้สำคัญมาก!
             return res.status(500).json({ message: "Database Error" });
         }
 
         if (results.length === 0) {
-            // แก้จาก .send เป็น .json
             return res.status(401).json({ message: "ไม่พบอีเมลนี้ในระบบ" });
         }
 
         const user = results[0];
 
         if (password !== user.password) {
-            // แก้จาก .send เป็น .json
             return res.status(401).json({ message: "รหัสผ่านไม่ถูกต้อง" });
         }
         res.json({
