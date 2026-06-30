@@ -1,74 +1,71 @@
-//ไฟล์แจ้งเตือนต่างๆ เช่น แจ้งเตือนเมื่ออาหารหมด หรือแจ้งเตือนเมื่อมีการตั้งเวลาให้อาหารแมว
-
+// controllers/notificationController.js
 const db = require('../config/db');
 
-// เพิ่มการแจ้งเตือน
+// 1. เพิ่มการแจ้งเตือนลงตาราง notifications โดยตรง
 exports.addNotification = (req, res) => {
-    const { cat_id, title, event_date, event_time } = req.body;
+    // [แก้ไข] เปลี่ยนจาก cat_id เป็น device_id
+    const { device_id, title, threshold_gram } = req.body;
 
-    if (!cat_id || !title || !event_date || !event_time) {
+    if (!device_id || !title || threshold_gram === undefined) {
         return res.status(400).json({ message: "ข้อมูลไม่ครบถ้วน" });
     }
 
-    const sql = "INSERT INTO notifications (cat_id, title, event_date, event_time) VALUES (?, ?, ?, ?)";
-    db.query(sql, [cat_id, title, event_date, event_time], (err, result) => {
+    const message = `แจ้งเตือนเมื่ออาหารในถาดเหลือน้อยกว่า ${threshold_gram} กรัม`;
+
+    // [แก้ไข] เปลี่ยนชื่อคอลัมน์ใน SQL เป็น device_id
+    const sql = "INSERT INTO notifications (device_id, title, message, is_read, created_at) VALUES (?, ?, ?, 0, NOW())";
+    
+    db.query(sql, [device_id, title, message], (err, result) => {
         if (err) {
-            console.error(err);
-            return res.status(500).json({ message: "บันทึกไม่สำเร็จ" });
+            console.error("Insert Error:", err);
+            return res.status(500).json({ message: "บันทึกการแจ้งเตือนไม่สำเร็จ" });
         }
-        res.json({ message: "บันทึกสำเร็จ" });
+        res.json({ message: "บันทึกการแจ้งเตือนเรียบร้อยแล้ว", id: result.insertId });
     });
 };
 
-// ดึงการแจ้งเตือนทั้งหมดของ User (ต้อง Join ตารางแมวเพื่อเช็คว่าเป็นของ User คนไหน)
+// 2. ดึงประวัติการแจ้งเตือนทั้งหมด
 exports.getNotifications = (req, res) => {
     const { user_id } = req.params;
 
-    // แก้ SQL: ใช้ DATE_FORMAT เพื่อล็อคค่าวันที่ให้เป็น String 'yyyy-mm-dd' เป๊ะๆ ไม่ต้องแปลง Timezone
+    // [แก้ไข] เปลี่ยนมา JOIN กับตาราง devices และดึงชื่อเครื่อง (name_device) แทนชื่อแมว
     const sql = `
         SELECT 
             n.id, 
-            n.cat_id, 
+            n.device_id, 
             n.title, 
-            DATE_FORMAT(n.event_date, '%Y-%m-%d') AS event_date, 
-            n.event_time, 
+            n.message, 
+            DATE_FORMAT(n.created_at, '%Y-%m-%d') AS event_date, 
+            DATE_FORMAT(n.created_at, '%H:%i') AS event_time, 
             n.is_read,
-            c.name_cat 
+            d.name_device 
         FROM notifications n
-        JOIN cats c ON n.cat_id = c.cat_id
-        WHERE c.user_id = ?
-        ORDER BY n.event_date DESC, n.event_time DESC
+        JOIN devices d ON n.device_id = d.device_id
+        WHERE d.user_id = ?
+        ORDER BY n.created_at DESC
     `;
 
     db.query(sql, [user_id], (err, results) => {
-        if (err) return res.status(500).json({ message: "Database Error" });
+        if (err) {
+            console.error(err);
+            return res.status(500).json({ message: "Database Error" });
+        }
         res.json(results);
     });
 };
 
-// ฟังก์ชันกดอ่านแล้ว (เคลียร์ตัวเลข)
-// ไฟล์: controllers/notificationController.js
-
+// 3. ฟังก์ชันกดอ่านแล้ว
 exports.markAsRead = (req, res) => {
     const { user_id } = req.body;
-
-    // เพิ่มเงื่อนไข SQL: อัปเดตเฉพาะอันที่ event_date/time ผ่านมาแล้ว หรือเท่ากับปัจจุบัน
-    // (ใช้ UTC_TIMESTAMP() หรือ NOW() ตาม Timezone เครื่อง Server)
+    
+    // [แก้ไข] เปลี่ยนมา JOIN กับตาราง devices เพื่อเช็ค user_id
     const sql = `
         UPDATE notifications n
-        JOIN cats c ON n.cat_id = c.cat_id
+        JOIN devices d ON n.device_id = d.device_id
         SET n.is_read = 1
-        WHERE c.user_id = ? 
-        AND n.is_read = 0
-        AND (
-            n.event_date < DATE_FORMAT(NOW(), '%Y-%m-%d') 
-            OR (
-                n.event_date = DATE_FORMAT(NOW(), '%Y-%m-%d') 
-                AND n.event_time <= DATE_FORMAT(NOW(), '%H:%i')
-            )
-        )
+        WHERE d.user_id = ? AND n.is_read = 0
     `;
-
+    
     db.query(sql, [user_id], (err, result) => {
         if (err) return res.status(500).json({ message: "Update Error" });
         res.json({ message: "Marked as read", affectedRows: result.affectedRows });
