@@ -1,4 +1,3 @@
-
 const { client, deviceCache } = require('../config/mqtt'); //ดึง client ที่ต่อเน็ตแล้วมาใช้ ดึง cache มาใช้
 const db = require('../config/db');           // ดึงฐานข้อมูลมาใช้
 
@@ -33,14 +32,14 @@ client.on('message', (topic, message) => {
                     console.log(`✅ พบแมวในระบบ: ${catName} (Tag: ${rfid})`);
 
                     // ----------------------------------------------------------
-                    // บันทึกข้อมูลลงตาราง feeding_logs
+                    // บันทึกข้อมูลลงตาราง feeding_logs (สถานะเริ่มต้น = กำลังกิน)
                     // ----------------------------------------------------------
                     const sqlInsertLog = "INSERT INTO feeding_logs (device_id, cat_id, status) VALUES (?, ?, 'Scanned')";
                     db.query(sqlInsertLog, [deviceId, catId], (errLog, resultLog) => {
                         if (errLog) {
                             console.error("❌ บันทึกประวัติลง feeding_logs ไม่สำเร็จ:", errLog);
                         } else {
-                            console.log(`💾 บันทึกประวัติการสแกนของ '${catName}' ที่เครื่อง '${deviceId}' เรียบร้อยแล้ว`);
+                            console.log(`💾 บันทึกประวัติการสแกนของ '${catName}' ที่เครื่อง '${deviceId}' เรียบร้อยแล้ว (log id: ${resultLog.insertId})`);
                         }
                     });
 
@@ -58,7 +57,6 @@ client.on('message', (topic, message) => {
     } 
     
    // 2️⃣ ตรวจสอบน้ำหนัก (เปลี่ยนมารับจาก /status ให้ตรงกับฝั่ง Arduino)
-   // 2️⃣ ตรวจสอบน้ำหนัก
     else if (topic.endsWith('/status')) {
         const msgStr = message.toString();
         if (msgStr === 'ONLINE') return; 
@@ -80,6 +78,68 @@ client.on('message', (topic, message) => {
             }
         } catch (e) {
             console.error("❌ Invalid JSON received (Status payload)", e.message);
+        }
+    }
+
+    // 3️⃣ ✅ ใหม่: แมวกินเสร็จแล้ว (Arduino คำนวณปริมาณที่กินและส่งมา)
+    else if (topic.endsWith('/eaten')) {
+        try {
+            const data = JSON.parse(message.toString());
+            const rfid = data.rfid_tag;
+            const amountEaten = data.amount_eaten;
+            const deviceId = topic.split('/')[2];
+
+            console.log(`🍗 เครื่อง ${deviceId} รายงานปริมาณที่กิน: ${amountEaten}g (Tag: ${rfid})`);
+
+            if (!rfid || amountEaten === undefined) {
+                console.error("❌ ข้อมูล eaten payload ไม่ครบ (ต้องมี rfid_tag และ amount_eaten)");
+                return;
+            }
+
+            // ✅ ถ้าน้ำหนักที่กินเป็น 0 (แมวไม่ได้กินจริง แค่มาสแกนแล้วเดินออก) ไม่ต้องบันทึกลง DB
+            if (amountEaten <= 0) {
+                console.log(`⏭️ เครื่อง ${deviceId} รายงานปริมาณที่กิน = 0g (Tag: ${rfid}) — ข้ามการบันทึก`);
+                return;
+            }
+
+            // หา cat_id จาก rfid_tag ก่อน
+            const sqlFindCat = "SELECT cat_id, name_cat FROM cats WHERE rfid_tag = ?";
+            db.query(sqlFindCat, [rfid], (err, results) => {
+                if (err) {
+                    console.error("❌ Database Error (ค้นหาแมวสำหรับบันทึกการกิน):", err);
+                    return;
+                }
+                if (results.length === 0) {
+                    console.log(`❌ ไม่พบแมว Tag ${rfid} ในระบบ ไม่สามารถบันทึกปริมาณที่กินได้`);
+                    return;
+                }
+
+                const catId = results[0].cat_id;
+                const catName = results[0].name_cat;
+
+                // อัปเดตแถวล่าสุดของ feeding_logs ที่ยังค้างสถานะ 'Scanned'
+                // ของ device+cat คู่นี้ ให้ใส่ปริมาณที่กิน (food) และปิดสถานะเป็น 'Completed'
+                const sqlUpdateLog = `
+                    UPDATE feeding_logs 
+                    SET food = ?, status = 'Completed' 
+                    WHERE device_id = ? AND cat_id = ? AND status = 'Scanned'
+                    ORDER BY log_id DESC 
+                    LIMIT 1
+                `;
+                db.query(sqlUpdateLog, [amountEaten, deviceId, catId], (errUpdate, result) => {
+                    if (errUpdate) {
+                        console.error("❌ อัปเดตปริมาณที่กินลง feeding_logs ไม่สำเร็จ:", errUpdate);
+                        return;
+                    }
+                    if (result.affectedRows === 0) {
+                        console.warn(`⚠️ ไม่พบแถว 'Scanned' ที่รอปิดของ ${catName} (device: ${deviceId}) — อาจถูกอัปเดตไปแล้ว หรือไม่มีการสแกนก่อนหน้า`);
+                        return;
+                    }
+                    console.log(`💾 บันทึกปริมาณที่กินของ '${catName}' ที่เครื่อง '${deviceId}' = ${amountEaten}g เรียบร้อยแล้ว`);
+                });
+            });
+        } catch (e) {
+            console.error("❌ Invalid JSON received (Eaten payload)", e.message);
         }
     }
 });

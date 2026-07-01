@@ -21,7 +21,9 @@ const client = mqtt.connect(connectUrl, {
 
 client.on('connect', () => {
     console.log('✅ MQTT Connected Successfully!');
-    client.subscribe('cat/feeder/+/status'); // ✅ เพิ่มบรรทัดนี้! เพื่อรับข้อมูลน้ำหนัก
+    client.subscribe('cat/feeder/+/status'); // ✅ รับข้อมูลน้ำหนัก
+    client.subscribe('cat/feeder/+/scan');   // ✅ รับข้อมูลการสแกน RFID
+    client.subscribe('cat/feeder/+/eaten');  // ✅ รับข้อมูลปริมาณที่กิน
 });
 
 // เช็คสถานะออนไลน์
