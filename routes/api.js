@@ -46,6 +46,8 @@ router.post('/add-device', devicesController.addDevice);// เพิ่มอุ
 router.get('/devices/:user_id', devicesController.getDevices); // เส้นนี้ใช้ดึงข้อมูลมาโชว์
 router.post('/update-device', devicesController.updateDevice);//แก้ไขข้อมูลอุปกรณ์
 router.post('/delete-device', devicesController.deleteDevice);//ลบอุปกรณ์
+router.post('/devices/feed', devicesController.feedDevice); // Route พิเศษสำหรับสั่งให้อาหารผ่าน API (ใช้กับหน้า DevicePage)
+router.get('/devices/:device_id/status', devicesController.getDeviceFoodStatus); // ✅ ดึงน้ำหนักถัง/ถาดล่าสุดจาก RAM Cache (MQTT)
 
 router.post('/add-cat', upload.single('image'), catController.addCat);//รูปแมว
 router.get('/cats/:user_id', catController.getCats);
@@ -67,6 +69,5 @@ router.post('/add-notification', notificationController.addNotification); // Rou
 router.get('/notifications/:user_id', notificationController.getNotifications);// Route สำหรับดึงประวัติการแจ้งเตือนของผู้ใช้ (ใช้กับหน้า NotificationPage)
 router.post('/mark-read', notificationController.markAsRead);// Route สำหรับกดอ่านแล้ว (ใช้กับหน้า NotificationPage)
 
-router.post('/devices/feed', devicesController.feedDevice); // Route พิเศษสำหรับสั่งให้อาหารผ่าน API (ใช้กับหน้า DevicePage)
 
 module.exports = router;

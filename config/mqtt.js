@@ -1,6 +1,10 @@
 require('dotenv').config();
 const mqtt = require('mqtt');
 
+// 1. สร้างตัวแปร Cache เก็บข้อมูลชั่วคราวใน RAM
+const deviceCache = {};
+
+
 let connectUrl = process.env.MQTT_HOST;
 if (connectUrl && !connectUrl.startsWith('mqtt')) {
     connectUrl = `mqtts://${connectUrl}`; 
@@ -17,7 +21,7 @@ const client = mqtt.connect(connectUrl, {
 
 client.on('connect', () => {
     console.log('✅ MQTT Connected Successfully!');
-    client.subscribe('cat/feeder/+/scan'); 
+    client.subscribe('cat/feeder/+/status'); // ✅ เพิ่มบรรทัดนี้! เพื่อรับข้อมูลน้ำหนัก
 });
 
 // เช็คสถานะออนไลน์
@@ -61,4 +65,5 @@ const sendCommand = (deviceId, command) => {
     return true;
 };
 
-module.exports = { client, sendCommand, checkDeviceOnline };
+// 2. อย่าลืม Export deviceCache ออกไปด้วย
+module.exports = { client, sendCommand, checkDeviceOnline, deviceCache };

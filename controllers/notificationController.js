@@ -38,7 +38,7 @@ exports.getNotifications = (req, res) => {
             DATE_FORMAT(n.created_at, '%Y-%m-%d') AS event_date, 
             DATE_FORMAT(n.created_at, '%H:%i') AS event_time, 
             n.is_read,
-            d.name_device 
+            d.name
         FROM notifications n
         JOIN devices d ON n.device_id = d.device_id
         WHERE d.user_id = ?

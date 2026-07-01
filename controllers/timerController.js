@@ -52,7 +52,7 @@ exports.deleteSchedule = (req, res) => {
     });
 };
 
-// 4. เปิด/ปิด การใช้งาน (Toggle Active)
+// 4. เปิด/ปิด การใช้งาน (Toggle Active) - เอาคอมเมนต์ออกแล้ว ✅
 exports.toggleSchedule = (req, res) => {
     const { schedule_id, is_active } = req.body; // รับค่า 1 หรือ 0
 

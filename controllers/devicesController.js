@@ -1,5 +1,6 @@
 const db = require('../config/db');
 const { sendCommand, checkDeviceOnline } = require('../config/mqtt'); 
+const { deviceCache } = require('../config/mqtt'); // ดึง cache มาใช้
 
 // ✅ เพิ่มอุปกรณ์: ตรวจสอบเครื่องซ้ำ -> ตรวจสอบ Hardware ID จริง -> บันทึก
 exports.addDevice = async (req, res) => {
@@ -85,14 +86,39 @@ exports.deleteDevice = (req, res) => {
 
 // ✅ สั่งให้อาหาร: ดึง device_id จาก DB มาใช้ส่ง MQTT
 exports.feedDevice = (req, res) => {
-    const { id } = req.body; 
+    // รับ amount มาจากแอปด้วย
+    const { id, amount } = req.body; 
+    
     const sql = "SELECT device_id FROM devices WHERE id = ?";
     db.query(sql, [id], (err, results) => {
         if (err || results.length === 0) {
             return res.status(404).json({ message: "ไม่พบอุปกรณ์นี้ในระบบ" });
         }
         const targetDeviceId = results[0].device_id; 
-        sendCommand(targetDeviceId, 'FEED_NOW'); //
-        res.json({ message: `สั่งเครื่อง ${targetDeviceId} ทำงานแล้ว!` });
+        
+        // ส่งข้อความแบบใส่ตัวเลข เช่น 'FEED_50'
+        const command = `FEED_${amount || 50}`; 
+        sendCommand(targetDeviceId, command); 
+        
+        res.json({ message: `สั่งเครื่อง ${targetDeviceId} จ่ายอาหาร ${amount} กรัมแล้ว!` });
+    });
+};
+
+// ในไฟล์ controllers/devicesController.js
+exports.getDeviceFoodStatus = (req, res) => {
+    const device_id = req.params.device_id.toUpperCase();
+    
+    // กันเหนียว เผื่อแอปยิงมาก่อนที่ Arduino จะส่งค่า
+    if (!global.deviceCache) global.deviceCache = {}; 
+    
+    // ✅ ต้องดึงจาก global.deviceCache ให้ตรงกัน
+    const status = global.deviceCache[device_id] || { tank_weight: 0, tray_weight: 0 };
+    
+    console.log(`📤 [API SEND] ส่งไปที่แอป -> ถัง: ${status.tank_weight}g | ถาด: ${status.tray_weight}g`);
+    
+    res.json({
+        device_id: device_id,
+        tank_weight: status.tank_weight,
+        tray_weight: status.tray_weight
     });
 };

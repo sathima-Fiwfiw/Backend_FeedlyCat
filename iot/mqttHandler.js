@@ -1,4 +1,5 @@
-const { client } = require('../config/mqtt'); // ดึง client ที่ต่อเน็ตแล้วมาใช้
+
+const { client, deviceCache } = require('../config/mqtt'); //ดึง client ที่ต่อเน็ตแล้วมาใช้ ดึง cache มาใช้
 const db = require('../config/db');           // ดึงฐานข้อมูลมาใช้
 
 // ------------------------------------------------------------------
@@ -56,23 +57,29 @@ client.on('message', (topic, message) => {
         }
     } 
     
-    // 2️⃣ ตรวจสอบว่าเป็นข้อมูลน้ำหนักอาหาร (Load Cell) หรือไม่
-    else if (topic.endsWith('/weight')) {
+   // 2️⃣ ตรวจสอบน้ำหนัก (เปลี่ยนมารับจาก /status ให้ตรงกับฝั่ง Arduino)
+   // 2️⃣ ตรวจสอบน้ำหนัก
+    else if (topic.endsWith('/status')) {
+        const msgStr = message.toString();
+        if (msgStr === 'ONLINE') return; 
+
         try {
-            const data = JSON.parse(message.toString());
-            const weight = data.weight;
-            const deviceId = topic.split('/')[2]; 
+            const data = JSON.parse(msgStr);
+            const deviceId = topic.split('/')[2].toUpperCase(); 
 
-            console.log(`⚖️ เครื่อง ${deviceId} ปริมาณอาหารเหลือ: ${weight} กรัม`);
-
-            // อัปเดตค่าน้ำหนักลง Database (ตาราง devices)
-            const sqlUpdateWeight = "UPDATE devices SET food_remain = ? WHERE device_id = ?";
-            db.query(sqlUpdateWeight, [weight, deviceId], (err, result) => {
-                if (err) console.error("❌ อัปเดตน้ำหนักอาหารไม่สำเร็จ:", err);
-            });
+            if (data.tank_weight !== undefined) {
+                // ✅ สร้าง global.deviceCache ถ้ายังไม่มี
+                if (!global.deviceCache) global.deviceCache = {};
+                
+                // ✅ บันทึกลงตัวแปร Global
+                global.deviceCache[deviceId] = {
+                    tank_weight: data.tank_weight,
+                    tray_weight: data.tray_weight
+                };
+                console.log(`⚖️ [RAM Cache] เครื่อง ${deviceId} | ถัง: ${data.tank_weight}g | ถาด: ${data.tray_weight}g`);
+            }
         } catch (e) {
-            console.error("❌ Invalid JSON received from Device (Weight payload)");
+            console.error("❌ Invalid JSON received (Status payload)", e.message);
         }
     }
-
 });
