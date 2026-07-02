@@ -1,34 +1,37 @@
 // controllers/notificationController.js
 const db = require('../config/db');
 
-// 1. เพิ่มการแจ้งเตือนลงตาราง notifications โดยตรง
+// 1. ✅ บันทึก "เกณฑ์แจ้งเตือน" ของเครื่อง (ไม่ใช่การสร้างแจ้งเตือนทันที)
+//    ระบบจะคอยเทียบน้ำหนักจริงจาก MQTT กับเกณฑ์นี้ใน mqttHandler.js
+//    แล้วค่อยสร้างแจ้งเตือนจริงตอนน้ำหนักต่ำกว่าเกณฑ์
 exports.addNotification = (req, res) => {
-    // [แก้ไข] เปลี่ยนจาก cat_id เป็น device_id
     const { device_id, title, threshold_gram } = req.body;
 
     if (!device_id || !title || threshold_gram === undefined) {
         return res.status(400).json({ message: "ข้อมูลไม่ครบถ้วน" });
     }
 
-    const message = `แจ้งเตือนเมื่ออาหารในถาดเหลือน้อยกว่า ${threshold_gram} กรัม`;
+    // upsert: ถ้าเครื่องนี้เคยตั้งค่าไว้แล้ว ให้อัปเดตทับ ถ้ายังไม่เคย ให้สร้างใหม่
+    const sql = `
+        INSERT INTO device_alert_settings (device_id, title, threshold_gram)
+        VALUES (?, ?, ?)
+        ON DUPLICATE KEY UPDATE title = VALUES(title), threshold_gram = VALUES(threshold_gram)
+    `;
 
-    // [แก้ไข] เปลี่ยนชื่อคอลัมน์ใน SQL เป็น device_id
-    const sql = "INSERT INTO notifications (device_id, title, message, is_read, created_at) VALUES (?, ?, ?, 0, NOW())";
-    
-    db.query(sql, [device_id, title, message], (err, result) => {
+    db.query(sql, [device_id, title, threshold_gram], (err, result) => {
         if (err) {
-            console.error("Insert Error:", err);
-            return res.status(500).json({ message: "บันทึกการแจ้งเตือนไม่สำเร็จ" });
+            console.error("❌ บันทึกเกณฑ์แจ้งเตือนไม่สำเร็จ:", err);
+            return res.status(500).json({ message: "บันทึกการตั้งค่าแจ้งเตือนไม่สำเร็จ" });
         }
-        res.json({ message: "บันทึกการแจ้งเตือนเรียบร้อยแล้ว", id: result.insertId });
+        console.log(`⚙️ ตั้งเกณฑ์แจ้งเตือนเครื่อง ${device_id}: "${title}" เมื่อน้อยกว่า ${threshold_gram}g`);
+        res.json({ message: "บันทึกการตั้งค่าแจ้งเตือนเรียบร้อยแล้ว" });
     });
 };
 
-// 2. ดึงประวัติการแจ้งเตือนทั้งหมด
+// 2. ดึงประวัติการแจ้งเตือนทั้งหมด (การแจ้งเตือนที่เกิดขึ้นจริงเท่านั้น ไม่ใช่ค่าตั้งไว้)
 exports.getNotifications = (req, res) => {
     const { user_id } = req.params;
 
-    // [แก้ไข] เปลี่ยนมา JOIN กับตาราง devices และดึงชื่อเครื่อง (name_device) แทนชื่อแมว
     const sql = `
         SELECT 
             n.id, 
@@ -38,7 +41,7 @@ exports.getNotifications = (req, res) => {
             DATE_FORMAT(n.created_at, '%Y-%m-%d') AS event_date, 
             DATE_FORMAT(n.created_at, '%H:%i') AS event_time, 
             n.is_read,
-            d.name
+            d.name AS device_name
         FROM notifications n
         JOIN devices d ON n.device_id = d.device_id
         WHERE d.user_id = ?
@@ -58,7 +61,6 @@ exports.getNotifications = (req, res) => {
 exports.markAsRead = (req, res) => {
     const { user_id } = req.body;
     
-    // [แก้ไข] เปลี่ยนมา JOIN กับตาราง devices เพื่อเช็ค user_id
     const sql = `
         UPDATE notifications n
         JOIN devices d ON n.device_id = d.device_id
@@ -69,5 +71,28 @@ exports.markAsRead = (req, res) => {
     db.query(sql, [user_id], (err, result) => {
         if (err) return res.status(500).json({ message: "Update Error" });
         res.json({ message: "Marked as read", affectedRows: result.affectedRows });
+    });
+};
+
+// 4. ✅ ลบการแจ้งเตือนทีละรายการ (ใช้กับ swipe-to-delete ในแอป)
+exports.deleteNotification = (req, res) => {
+    const { id } = req.body;
+
+    if (!id) {
+        return res.status(400).json({ message: "ต้องระบุ id ของการแจ้งเตือนที่จะลบ" });
+    }
+
+    const sql = "DELETE FROM notifications WHERE id = ?";
+
+    db.query(sql, [id], (err, result) => {
+        if (err) {
+            console.error("❌ ลบการแจ้งเตือนไม่สำเร็จ:", err);
+            return res.status(500).json({ message: "ลบการแจ้งเตือนไม่สำเร็จ" });
+        }
+        if (result.affectedRows === 0) {
+            return res.status(404).json({ message: "ไม่พบการแจ้งเตือนนี้ (อาจถูกลบไปแล้ว)" });
+        }
+        console.log(`🗑️ ลบการแจ้งเตือน id=${id} เรียบร้อยแล้ว`);
+        res.json({ message: "ลบการแจ้งเตือนเรียบร้อยแล้ว" });
     });
 };

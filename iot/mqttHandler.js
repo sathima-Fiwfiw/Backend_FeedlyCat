@@ -75,6 +75,9 @@ client.on('message', (topic, message) => {
                     tray_weight: data.tray_weight
                 };
                 console.log(`⚖️ [RAM Cache] เครื่อง ${deviceId} | ถัง: ${data.tank_weight}g | ถาด: ${data.tray_weight}g`);
+
+                // ✅ ทุกครั้งที่ได้น้ำหนักถังใหม่ ให้เช็คกับเกณฑ์แจ้งเตือนที่ตั้งไว้ทันที
+                checkLowFoodAlert(deviceId, data.tank_weight);
             }
         } catch (e) {
             console.error("❌ Invalid JSON received (Status payload)", e.message);
@@ -143,3 +146,49 @@ client.on('message', (topic, message) => {
         }
     }
 });
+
+
+
+// ------------------------------------------------------------------
+// 🔔 เช็คเกณฑ์แจ้งเตือนอาหารใกล้หมด (เทียบน้ำหนักถังกับค่าที่ตั้งไว้ในหน้าแอป)
+// เรียกทุกครั้งที่ได้รับ /status จาก Arduino (ทุก ~5 วินาที)
+// ------------------------------------------------------------------
+
+// เก็บสถานะ "แจ้งเตือนไปแล้วหรือยัง" ของแต่ละเครื่องไว้ใน RAM
+// เพื่อไม่ให้สร้าง notification ซ้ำทุก 5 วินาทีตราบใดที่น้ำหนักยังต่ำกว่าเกณฑ์อยู่
+if (!global.lowFoodAlerted) global.lowFoodAlerted = {};
+
+function checkLowFoodAlert(deviceId, tankWeight) {
+    const sqlGetThreshold = "SELECT title, threshold_gram FROM device_alert_settings WHERE device_id = ?";
+    db.query(sqlGetThreshold, [deviceId], (err, rows) => {
+        if (err) {
+            console.error("❌ Database Error (เช็คเกณฑ์แจ้งเตือน):", err);
+            return;
+        }
+        if (rows.length === 0) return; // เครื่องนี้ยังไม่เคยตั้งค่าแจ้งเตือนไว้
+
+        const { title, threshold_gram } = rows[0];
+
+        if (tankWeight <= threshold_gram) {
+            // ต่ำกว่าเกณฑ์ -> แจ้งเตือนแค่ครั้งเดียวต่อรอบ (จนกว่าจะเติมอาหารแล้วน้ำหนักกลับขึ้นไปสูงกว่าเกณฑ์)
+            if (!global.lowFoodAlerted[deviceId]) {
+                const message = `อาหารในถังเหลือ ${tankWeight}g (ต่ำกว่าที่ตั้งไว้ ${threshold_gram}g)`;
+                const sqlInsertNoti = "INSERT INTO notifications (device_id, title, message, is_read, created_at) VALUES (?, ?, ?, 0, NOW())";
+                db.query(sqlInsertNoti, [deviceId, title, message], (errN) => {
+                    if (errN) {
+                        console.error("❌ บันทึกแจ้งเตือนอาหารใกล้หมดไม่สำเร็จ:", errN);
+                        return;
+                    }
+                    console.log(`🔔 [แจ้งเตือน] เครื่อง ${deviceId} อาหารเหลือ ${tankWeight}g ต่ำกว่าเกณฑ์ ${threshold_gram}g`);
+                });
+                global.lowFoodAlerted[deviceId] = true;
+            }
+        } else {
+            // น้ำหนักกลับสูงกว่าเกณฑ์แล้ว (เช่น เติมอาหารใหม่) -> reset ไว้ เผื่อรอบหน้าจะได้แจ้งเตือนใหม่ได้อีก
+            if (global.lowFoodAlerted[deviceId]) {
+                console.log(`✅ เครื่อง ${deviceId} อาหารกลับมาเพียงพอแล้ว (${tankWeight}g) — รีเซ็ตสถานะแจ้งเตือน`);
+            }
+            global.lowFoodAlerted[deviceId] = false;
+        }
+    });
+}

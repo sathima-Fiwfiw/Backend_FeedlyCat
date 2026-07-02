@@ -70,6 +70,7 @@ router.post('/add-notification', notificationController.addNotification); // Rou
 
 router.get('/notifications/:user_id', notificationController.getNotifications);// Route สำหรับดึงประวัติการแจ้งเตือนของผู้ใช้ (ใช้กับหน้า NotificationPage)
 router.post('/mark-read', notificationController.markAsRead);// Route สำหรับกดอ่านแล้ว (ใช้กับหน้า NotificationPage)
+router.post('/delete-notification', notificationController.deleteNotification); // ✅ ลบการแจ้งเตือนทีละรายการ (swipe-to-delete)
 
 
 module.exports = router;
