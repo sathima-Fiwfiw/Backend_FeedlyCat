@@ -12,6 +12,7 @@ const devicesController = require('../controllers/devicesController');
 const catController = require('../controllers/catController');
 const timerController = require('../controllers/timerController'); //เวลาที่เกี่ยวกับการตั้งเวลา (Schedule) จะอยู่ในนี้
 const notificationController = require('../controllers/notificationController');// แจ้งเตือนต่างๆ
+const feedingStatController = require('../controllers/feedingStatController'); // สรุปสถิติการกิน (กราฟ)
 
 // Cloudinary
 cloudinary.config({
@@ -54,6 +55,7 @@ router.get('/cats/:user_id', catController.getCats);
 router.post('/update-cat', upload.single('image'), catController.updateCat);//แก้ไขข้อมูลแมว
 router.post('/delete-cat', catController.deleteCat); // เส้นสำหรับลบแมว
 router.post('/record-feeding', catController.recordFeeding);
+router.get('/feeding-stats/:cat_id', feedingStatController.getFeedingStats); // ✅ สรุปข้อมูลกราฟการกิน
 
 router.post('/add-schedule', timerController.addSchedule); // เพิ่มเวลา
 router.get('/schedules/:device_id', timerController.getSchedules); // ดึงเวลาทั้งหมดของเครื่อง
