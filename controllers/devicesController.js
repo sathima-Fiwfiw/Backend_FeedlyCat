@@ -112,13 +112,14 @@ exports.getDeviceFoodStatus = (req, res) => {
     if (!global.deviceCache) global.deviceCache = {}; 
     
     // ✅ ต้องดึงจาก global.deviceCache ให้ตรงกัน
-    const status = global.deviceCache[device_id] || { tank_weight: 0, tray_weight: 0 };
+    const status = global.deviceCache[device_id] || { tank_weight: 0, tray_weight: 0, water_low: false };
     
-    console.log(`📤 [API SEND] ส่งไปที่แอป -> ถัง: ${status.tank_weight}g | ถาด: ${status.tray_weight}g`);
+    console.log(`📤 [API SEND] ส่งไปที่แอป -> ถัง: ${status.tank_weight}g | ถาด: ${status.tray_weight}g | น้ำ: ${status.water_low ? '⚠️ ใกล้หมด' : '✅ ปกติ'}`);
     
     res.json({
         device_id: device_id,
         tank_weight: status.tank_weight,
-        tray_weight: status.tray_weight
+        tray_weight: status.tray_weight,
+        water_low: status.water_low === true
     });
 };

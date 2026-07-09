@@ -69,15 +69,19 @@ client.on('message', (topic, message) => {
                 // ✅ สร้าง global.deviceCache ถ้ายังไม่มี
                 if (!global.deviceCache) global.deviceCache = {};
                 
-                // ✅ บันทึกลงตัวแปร Global
+                // ✅ บันทึกลงตัวแปร Global (รวม water_low ที่ Arduino ส่งมาจากเซนเซอร์ XKC-Y25V)
                 global.deviceCache[deviceId] = {
                     tank_weight: data.tank_weight,
-                    tray_weight: data.tray_weight
+                    tray_weight: data.tray_weight,
+                    water_low: data.water_low === true // กันเหนียวกรณี field หาย ให้ default เป็น false
                 };
-                console.log(`⚖️ [RAM Cache] เครื่อง ${deviceId} | ถัง: ${data.tank_weight}g | ถาด: ${data.tray_weight}g`);
+                console.log(`⚖️ [RAM Cache] เครื่อง ${deviceId} | ถัง: ${data.tank_weight}g | ถาด: ${data.tray_weight}g | น้ำ: ${data.water_low ? '⚠️ ใกล้หมด' : '✅ ปกติ'}`);
 
                 // ✅ ทุกครั้งที่ได้น้ำหนักถังใหม่ ให้เช็คกับเกณฑ์แจ้งเตือนที่ตั้งไว้ทันที
                 checkLowFoodAlert(deviceId, data.tank_weight);
+
+                // ✅ เช็คสถานะน้ำจากเซนเซอร์ XKC-Y25V ทุกครั้งที่ได้รับ /status ด้วย
+                checkLowWaterAlert(deviceId, data.water_low === true);
             }
         } catch (e) {
             console.error("❌ Invalid JSON received (Status payload)", e.message);
@@ -191,4 +195,38 @@ function checkLowFoodAlert(deviceId, tankWeight) {
             global.lowFoodAlerted[deviceId] = false;
         }
     });
+}
+
+// ------------------------------------------------------------------
+// 💧 เช็คสถานะน้ำใกล้หมด (จากเซนเซอร์ XKC-Y25V ที่ Arduino ส่งมาเป็น water_low: true/false)
+// เรียกทุกครั้งที่ได้รับ /status จาก Arduino (ทุก ~5 วินาที) เหมือนกับของอาหาร
+// ------------------------------------------------------------------
+
+// เก็บสถานะ "แจ้งเตือนไปแล้วหรือยัง" ของแต่ละเครื่องไว้ใน RAM
+// เพื่อไม่ให้สร้าง notification ซ้ำทุก 5 วินาทีตราบใดที่น้ำยังใกล้หมดอยู่
+if (!global.lowWaterAlerted) global.lowWaterAlerted = {};
+
+function checkLowWaterAlert(deviceId, waterLow) {
+    if (waterLow) {
+        // น้ำใกล้หมด -> แจ้งเตือนแค่ครั้งเดียวต่อรอบ (จนกว่าจะเติมน้ำแล้วเซนเซอร์กลับมาปกติ)
+        if (!global.lowWaterAlerted[deviceId]) {
+            const title = "น้ำใกล้หมด";
+            const message = "ตรวจไม่พบน้ำในถัง กรุณาเติมน้ำให้แมวด้วยนะ";
+            const sqlInsertNoti = "INSERT INTO notifications (device_id, title, message, is_read, created_at) VALUES (?, ?, ?, 0, NOW())";
+            db.query(sqlInsertNoti, [deviceId, title, message], (errN) => {
+                if (errN) {
+                    console.error("❌ บันทึกแจ้งเตือนน้ำใกล้หมดไม่สำเร็จ:", errN);
+                    return;
+                }
+                console.log(`🔔 [แจ้งเตือน] เครื่อง ${deviceId} ตรวจไม่พบน้ำในถัง`);
+            });
+            global.lowWaterAlerted[deviceId] = true;
+        }
+    } else {
+        // เซนเซอร์ตรวจพบน้ำกลับมาปกติแล้ว (เช่น เติมน้ำใหม่) -> reset ไว้ เผื่อรอบหน้าจะได้แจ้งเตือนใหม่ได้อีก
+        if (global.lowWaterAlerted[deviceId]) {
+            console.log(`✅ เครื่อง ${deviceId} มีน้ำเพียงพอแล้ว — รีเซ็ตสถานะแจ้งเตือนน้ำ`);
+        }
+        global.lowWaterAlerted[deviceId] = false;
+    }
 }
