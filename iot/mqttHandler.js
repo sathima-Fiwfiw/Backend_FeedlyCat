@@ -5,7 +5,20 @@ const db = require('../config/db');           // ดึงฐานข้อม�
 // รับข้อมูลจาก Arduino แล้วเช็คฐานข้อมูลส่งชื่อกลับ
 // ------------------------------------------------------------------
 client.on('message', (topic, message) => {
-    
+
+    // ✅ [ใหม่] อัปเดตเวลาล่าสุดที่ได้รับข้อความจากเครื่องนี้
+    // ทุก topic ที่เข้ามา (scan, status, eaten) ถือว่าเครื่องยังออนไลน์อยู่
+    // devicesController.js จะเอา lastSeen นี้ไปเช็คว่าเครื่อง online/offline
+    const topicParts = topic.split('/');
+    if (topicParts.length >= 3) {
+        const msgDeviceId = topicParts[2].toUpperCase();
+        if (!global.deviceCache) global.deviceCache = {};
+        if (!global.deviceCache[msgDeviceId]) {
+            global.deviceCache[msgDeviceId] = { tank_weight: 0, tray_weight: 0, water_low: false };
+        }
+        global.deviceCache[msgDeviceId].lastSeen = Date.now();
+    }
+
     // 1️⃣ ตรวจสอบว่าเป็นข้อมูลการสแกนบัตร (RFID) หรือไม่
     if (topic.endsWith('/scan')) {
         try {
@@ -70,7 +83,9 @@ client.on('message', (topic, message) => {
                 if (!global.deviceCache) global.deviceCache = {};
                 
                 // ✅ บันทึกลงตัวแปร Global (รวม water_low ที่ Arduino ส่งมาจากเซนเซอร์ XKC-Y25V)
+                // ⚠️ ใช้ ...global.deviceCache[deviceId] เพื่อไม่ให้ lastSeen ที่เพิ่งเซ็ตด้านบนหาย
                 global.deviceCache[deviceId] = {
+                    ...global.deviceCache[deviceId],
                     tank_weight: data.tank_weight,
                     tray_weight: data.tray_weight,
                     water_low: data.water_low === true // กันเหนียวกรณี field หาย ให้ default เป็น false

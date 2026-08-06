@@ -51,6 +51,7 @@ exports.addDevice = async (req, res) => {
         res.status(500).json({ message: "เกิดข้อผิดพลาดของระบบ" });
     }
 };
+
 // ✅ ดึงรายการอุปกรณ์: แสดงชื่อแมวที่ผูกกับ User นั้นๆ
 exports.getDevices = (req, res) => {
     const { user_id } = req.params;
@@ -84,7 +85,21 @@ exports.deleteDevice = (req, res) => {
     });
 };
 
-// ✅ สั่งให้อาหาร: ดึง device_id จาก DB มาใช้ส่ง MQTT
+// ------------------------------------------------------------------
+// ✅ [ใหม่] เช็คว่าเครื่องยังออนไลน์อยู่จริงไหม โดยดูจาก "เวลาล่าสุด"
+// ที่ mqttHandler.js อัปเดต global.deviceCache[deviceId].lastSeen
+// (เครื่องส่ง /status เข้ามาทุก 5 วิ ถ้าเงียบเกิน 15 วิ ถือว่าออฟไลน์)
+// ------------------------------------------------------------------
+const ONLINE_THRESHOLD_MS = 15000;
+
+function isDeviceOnline(deviceId) {
+    if (!global.deviceCache) return false;
+    const status = global.deviceCache[deviceId];
+    if (!status || !status.lastSeen) return false;
+    return (Date.now() - status.lastSeen) < ONLINE_THRESHOLD_MS;
+}
+
+// ✅ สั่งให้อาหาร: เช็คออนไลน์ก่อนเสมอ ห้ามสั่งถ้าเครื่องไม่ได้เชื่อมต่อ
 exports.feedDevice = (req, res) => {
     // รับ amount มาจากแอปด้วย
     const { id, amount } = req.body; 
@@ -94,8 +109,15 @@ exports.feedDevice = (req, res) => {
         if (err || results.length === 0) {
             return res.status(404).json({ message: "ไม่พบอุปกรณ์นี้ในระบบ" });
         }
-        const targetDeviceId = results[0].device_id; 
-        
+        const targetDeviceId = results[0].device_id.toUpperCase(); 
+
+        // ✅ กันการสั่งจ่ายอาหารตอนเครื่องไม่ได้เสียบปลั๊ก/ไม่ได้เชื่อมต่อ
+        if (!isDeviceOnline(targetDeviceId)) {
+            return res.status(400).json({ 
+                message: "ไม่สามารถสั่งจ่ายอาหารได้ เนื่องจากเครื่องไม่ได้เชื่อมต่อ กรุณาตรวจสอบว่าเสียบปลั๊กและเชื่อมต่อ WiFi อยู่" 
+            });
+        }
+
         // ส่งข้อความแบบใส่ตัวเลข เช่น 'FEED_50'
         const command = `FEED_${amount || 50}`; 
         sendCommand(targetDeviceId, command); 
@@ -104,22 +126,25 @@ exports.feedDevice = (req, res) => {
     });
 };
 
-// ในไฟล์ controllers/devicesController.js
+// ✅ ดูสถานะน้ำหนัก/น้ำ: ถ้าออฟไลน์ ไม่ส่งค่าตัวเลข (ส่ง null) พร้อม flag online ให้แอปไปแสดง UI เอง
 exports.getDeviceFoodStatus = (req, res) => {
     const device_id = req.params.device_id.toUpperCase();
-    
+
     // กันเหนียว เผื่อแอปยิงมาก่อนที่ Arduino จะส่งค่า
     if (!global.deviceCache) global.deviceCache = {}; 
-    
+
+    const online = isDeviceOnline(device_id);
+
     // ✅ ต้องดึงจาก global.deviceCache ให้ตรงกัน
     const status = global.deviceCache[device_id] || { tank_weight: 0, tray_weight: 0, water_low: false };
     
-    console.log(`📤 [API SEND] ส่งไปที่แอป -> ถัง: ${status.tank_weight}g | ถาด: ${status.tray_weight}g | น้ำ: ${status.water_low ? '⚠️ ใกล้หมด' : '✅ ปกติ'}`);
+    console.log(`📤 [API SEND] ส่งไปที่แอป -> ${online ? '🟢 ออนไลน์' : '🔴 ออฟไลน์'} | ถัง: ${status.tank_weight}g | ถาด: ${status.tray_weight}g | น้ำ: ${status.water_low ? '⚠️ ใกล้หมด' : '✅ ปกติ'}`);
     
     res.json({
         device_id: device_id,
-        tank_weight: status.tank_weight,
-        tray_weight: status.tray_weight,
-        water_low: status.water_low === true
+        online: online,
+        tank_weight: online ? status.tank_weight : null,
+        tray_weight: online ? status.tray_weight : null,
+        water_low: online ? (status.water_low === true) : null
     });
 };
