@@ -4,10 +4,11 @@ const cors = require('cors');
 
 // ✅ เพิ่มไลบรารีสำหรับจัดการเวลา
 const cron = require('node-cron');
-const moment = require('moment');
+const moment = require('moment-timezone');
 
 // ✅ เรียกใช้ไฟล์ MQTT โดยดึงมาทั้ง client และ sendCommand
 const { client: mqttClient, sendCommand } = require('./config/mqtt');
+
 // ✅ เรียกใช้ฐานข้อมูลสำหรับ Query หาเวลา
 const db = require('./config/db');
 
@@ -37,50 +38,91 @@ app.get('/', (req, res) => {
 // Route พิเศษสำหรับทดสอบสั่งเครื่องให้อาหาร (กดผ่านเว็บได้เลย)
 // ---------------------------------------------------------
 app.get('/test-feed', (req, res) => {
-    mqttClient.publish('cat/feeder/command', 'FEED_NOW'); 
-    
+    mqttClient.publish('cat/feeder/command', 'FEED_NOW');
+
     console.log('🐱 Command sent: FEED_NOW');
     res.send('ส่งคำสั่งให้อาหารแมวเรียบร้อยแล้ว! (Check Console)');
 });
 
 // ---------------------------------------------------------
 // ✅ ระบบตั้งเวลาให้อาหารอัตโนมัติ (Scheduler)
-// ทำงานทุกๆ 1 นาที
+// ทำงานทุกๆ 1 นาที (เวลาไทย)
 // ---------------------------------------------------------
 cron.schedule('* * * * *', () => {
-    const now = moment();
-    const currentTime = now.format('HH:mm'); // ดึงเวลาปัจจุบัน เช่น 14:30
-    const currentDay = now.format('ddd').toUpperCase().substring(0, 2); // ดึงชื่อวันสั้นๆ เช่น MO, TU
 
-    console.log(`⏰ Checking schedule for: ${currentTime} (${currentDay})`);
+    // 🇹🇭 ใช้เวลาไทย
+    const now = moment().tz('Asia/Bangkok');
 
-    // ค้นหา Schedule ที่ตรงกับเวลาปัจจุบัน และเปิดใช้งานอยู่ (is_active = 1)
-    const sql = "SELECT * FROM schedules WHERE `time` = ? AND is_active = 1";
-    
+    const currentTime = now.format('HH:mm');
+    const currentDay = now.format('ddd').toUpperCase().substring(0, 2);
+
+    console.log('===================================');
+    console.log(`🇹🇭 Thai Time : ${now.format('YYYY-MM-DD HH:mm:ss')}`);
+    console.log(`⏰ Checking schedule : ${currentTime} (${currentDay})`);
+
+    const sql = `
+        SELECT *
+        FROM schedules
+        WHERE time = ?
+        AND is_active = 1
+    `;
+
     db.query(sql, [currentTime], (err, results) => {
-        if (err) return console.error("❌ Scheduler Error:", err);
+
+        if (err) {
+            console.error("❌ Scheduler Error:", err);
+            return;
+        }
+
+        console.log(`📋 Found ${results.length} schedule(s)`);
+
+        if (results.length === 0) {
+            console.log("⚠️ No schedule matched this minute.");
+        }
 
         results.forEach(schedule => {
-            const repeat = schedule.repeat; // เช่น "Everyday" หรือ "MO,WE,FR"
-            
-            // ตรวจสอบเงื่อนไขวัน
-            const isToday = repeat === 'Everyday' || repeat.includes(currentDay);
+
+            console.log("📌 Schedule:", schedule);
+
+            const repeat = schedule.repeat || "";
+
+            const isToday =
+                repeat === "Everyday" ||
+                repeat.includes(currentDay);
 
             if (isToday) {
-                console.log(`🚀 Triggering Feed: Device ${schedule.device_id}, Portion ${schedule.portion}g`);
-                
-                // ส่งคำสั่งไปที่ MQTT ให้เครื่องจ่ายอาหาร
-                sendCommand(schedule.device_id, "FEED_NOW"); 
+
+                console.log(
+                    `🚀 Trigger Feed -> Device: ${schedule.device_id}, Portion: ${schedule.portion}g`
+                );
+
+                sendCommand(schedule.device_id, "FEED_NOW");
+
+            } else {
+
+                console.log(
+                    `⏭ Skip Device ${schedule.device_id} (Today is ${currentDay}, Repeat = ${repeat})`
+                );
+
             }
+
         });
+
     });
+
+}, {
+    timezone: "Asia/Bangkok"
 });
 // ---------------------------------------------------------
 
 const PORT = process.env.PORT || 3000;
+
 app.listen(PORT, () => {
+
     console.log(`🚀 Server running on port ${PORT}`);
-    
-    // (Optional) ถ้าอยากให้ส่งทันทีที่เปิด Server ให้เอา Comment ออก:
+    console.log("🇹🇭 Scheduler Timezone : Asia/Bangkok");
+
+    // (Optional)
     // mqttClient.publish('cat/feeder/command', 'SERVER_STARTUP_CHECK');
+
 });
