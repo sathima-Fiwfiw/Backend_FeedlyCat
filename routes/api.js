@@ -15,10 +15,16 @@ const notificationController = require('../controllers/notificationController');
 const feedingStatController = require('../controllers/feedingStatController'); // สรุปสถิติการกิน (กราฟ)
 
 // Cloudinary
+// cloudinary.config({
+//     cloud_name: 'dhxoc5hkd',
+//     api_key: '593483354845631',
+//     api_secret: 'jI5h8VrEfT6vmrRHQKLSnyoj-Nc'
+// });
+
 cloudinary.config({
-    cloud_name: 'dhxoc5hkd',
-    api_key: '593483354845631',
-    api_secret: 'jI5h8VrEfT6vmrRHQKLSnyoj-Nc'
+    cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
+    api_key: process.env.CLOUDINARY_API_KEY,
+    api_secret: process.env.CLOUDINARY_API_SECRET
 });
 
 // 3. กำหนดว่าจะเก็บไฟล์ยังไง
