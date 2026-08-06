@@ -26,7 +26,7 @@ app.use((req, res, next) => {
 });
 
 // เรียกใช้ Route ทั้งหมด
-app.use('/api', apiRoutes);
+app.use('/', apiRoutes);
 
 // Route เช็ค Server
 app.get('/', (req, res) => {
