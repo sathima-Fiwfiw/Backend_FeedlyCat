@@ -1,5 +1,36 @@
 const db = require('../config/db');
-const nodemailer = require('nodemailer'); // ลืมรหัสผ่าน
+// ✅ เปลี่ยนจาก Resend มาเป็น Brevo (Sendinblue) — ใช้ HTTP API ตรงๆ ผ่าน fetch ไม่ต้องลง package เพิ่ม
+const BREVO_API_KEY = process.env.BREVO_API_KEY; // ดึง API Key จาก Environment Variable
+const BREVO_SENDER_EMAIL = process.env.BREVO_SENDER_EMAIL || 'feedlycat@gmail.com'; // ต้องไป verify อีเมลนี้ใน Brevo dashboard ก่อน (Senders > Add a sender)
+const BREVO_SENDER_NAME = 'FeedlyCat App';
+
+// ฟังก์ชันช่วยส่งอีเมลผ่าน Brevo API
+async function sendBrevoEmail({ to, subject, html }) {
+    const response = await fetch('https://api.brevo.com/v3/smtp/email', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'Accept': 'application/json',
+            'api-key': BREVO_API_KEY,
+        },
+        body: JSON.stringify({
+            sender: { name: BREVO_SENDER_NAME, email: BREVO_SENDER_EMAIL },
+            to: [{ email: to }],
+            subject,
+            htmlContent: html,
+        }),
+    });
+
+    const data = await response.json().catch(() => ({}));
+
+    if (!response.ok) {
+        // Brevo จะส่ง error กลับมาเป็น JSON เช่น { code, message }
+        throw new Error(data.message || `Brevo API Error (status ${response.status})`);
+    }
+
+    return data;
+}
+
 // Register
 exports.register = (req, res) => {
     const { name, email, password, phone } = req.body;
@@ -107,13 +138,11 @@ exports.updateProfile = (req, res) => {
         params = [name, user_id];
     }
 
-  db.query(sql, [email], (err, results) => {
-    if (err) {
-        console.error(err);
-        // ❌ ของเดิม: return res.status(500).send("Database Error");
-        // ✅ เปลี่ยนเป็น:
-        return res.status(500).json({ message: "Database Error" });
-    }
+    db.query(sql, params, (err, results) => {
+        if (err) {
+            console.error(err);
+            return res.status(500).json({ message: "Database Error" });
+        }
         // ส่งข้อมูลล่าสุดกลับไปให้ Frontend อัปเดตหน้าจอทันที
         res.json({
             message: "อัปเดตข้อมูลสำเร็จ!",
@@ -144,55 +173,45 @@ exports.forgotPassword = (req, res) => {
             if (err) console.log(err);
             // 5. บันทึก Token ใหม่ลง Database
             const insertSql = "INSERT INTO password_resets (email, token) VALUES (?, ?)";
-            db.query(insertSql, [email, token], (err) => {
+            db.query(insertSql, [email, token], async (err) => {
                 if (err) return res.status(500).send("สร้าง Token ไม่สำเร็จ");
-                // 6. ตั้งค่าคนส่ง (Transporter)
-                // 6. ตั้งค่าคนส่ง (Transporter)
-        const transporter = nodemailer.createTransport({
-            host: 'smtp.gmail.com',
-            port: 465,
-            secure: true,
-            family: 4, // 🔒 บังคับ IPv4 เท่านั้น ตัดปัญหา IPv6 ENETUNREACH เด็ดขาด
-            auth: {
-                user: 'feedlycat@gmail.com',  
-                pass: 'mfeoaceujplpizec'     
-                },
-            connectionTimeout: 20000,
-            greetingTimeout: 20000,
-            socketTimeout: 20000,
-            });
-                const mailOptions = {
-                    from: 'FeedlyCat App <feedlycat@gmail.com>', // ชื่อผู้ส่ง
-                    to: email, 
-                    subject: 'รหัส OTP สำหรับรีเซ็ตรหัสผ่าน (FeedlyCat)',
-                    html: `
-                        <div style="font-family: 'Sarabun', sans-serif; max-width: 500px; margin: auto; padding: 20px; border: 1px solid #ddd; border-radius: 10px; background-color: #ffffff;">
-                            <h2 style="color: #4FC3F7; text-align: center;">FeedlyCat 🐱</h2>
-                            <hr style="border: 0; border-top: 1px solid #eee;">
-                            
-                            <p style="font-size: 16px; color: #333;">สวัสดีฮ้ะ,</p>
-                            <p style="font-size: 16px; color: #333;">เราได้รับคำขอรีเซ็ตรหัสผ่านสำหรับบัญชีของคุณ นี่คือรหัส OTP ของคุณ:</p>
-                            
-                            <div style="background-color: #E3F2FD; padding: 15px; text-align: center; border-radius: 10px; margin: 20px 0;">
-                                <span style="font-size: 32px; font-weight: bold; letter-spacing: 5px; color: #0277BD;">${token}</span>
-                            </div>
-                            
-                            <p style="font-size: 14px; color: #777;">รหัสนี้มีอายุการใช้งาน <strong>15 นาที</strong> เท่านั้น</p>
-                            <p style="font-size: 14px; color: #777;">หากคุณไม่ได้เป็นผู้ร้องขอ กรุณาเพิกเฉยต่ออีเมลฉบับนี้</p>
-                            
-                            <hr style="border: 0; border-top: 1px solid #eee;">
-                            <p style="font-size: 12px; color: #aaa; text-align: center;">FeedlyCat Application</p>
+
+                // 6. ✅ ส่งเมลผ่าน Resend (แทน nodemailer เดิม)
+                //    ใช้ HTTP API ไม่ใช่ SMTP port เลย จึงไม่ถูก Render Free Tier บล็อก
+                const htmlContent = `
+                    <div style="font-family: 'Sarabun', sans-serif; max-width: 500px; margin: auto; padding: 20px; border: 1px solid #ddd; border-radius: 10px; background-color: #ffffff;">
+                        <h2 style="color: #4FC3F7; text-align: center;">FeedlyCat 🐱</h2>
+                        <hr style="border: 0; border-top: 1px solid #eee;">
+                        
+                        <p style="font-size: 16px; color: #333;">สวัสดีฮ้ะ,</p>
+                        <p style="font-size: 16px; color: #333;">เราได้รับคำขอรีเซ็ตรหัสผ่านสำหรับบัญชีของคุณ นี่คือรหัส OTP ของคุณ:</p>
+                        
+                        <div style="background-color: #E3F2FD; padding: 15px; text-align: center; border-radius: 10px; margin: 20px 0;">
+                            <span style="font-size: 32px; font-weight: bold; letter-spacing: 5px; color: #0277BD;">${token}</span>
                         </div>
-                    `
-                };
-                // 8. ส่งเมล
-                transporter.sendMail(mailOptions, (error, info) => {
-                    if (error) {
-                        console.log(error);
-                        return res.status(500).send("ส่งอีเมลไม่สำเร็จ");
-                    }
+                        
+                        <p style="font-size: 14px; color: #777;">รหัสนี้มีอายุการใช้งาน <strong>15 นาที</strong> เท่านั้น</p>
+                        <p style="font-size: 14px; color: #777;">หากคุณไม่ได้เป็นผู้ร้องขอ กรุณาเพิกเฉยต่ออีเมลฉบับนี้</p>
+                        
+                        <hr style="border: 0; border-top: 1px solid #eee;">
+                        <p style="font-size: 12px; color: #aaa; text-align: center;">FeedlyCat Application</p>
+                    </div>
+                `;
+
+                try {
+                    const data = await sendBrevoEmail({
+                        to: email,
+                        subject: 'รหัส OTP สำหรับรีเซ็ตรหัสผ่าน (FeedlyCat)',
+                        html: htmlContent,
+                    });
+
+                    console.log("✅ ส่งอีเมลสำเร็จ:", data);
                     res.json({ message: "ส่งรหัส OTP ไปที่อีเมลเรียบร้อยแล้ว" });
-                });
+
+                } catch (err) {
+                    console.log("❌ Brevo Error:", err.message);
+                    return res.status(500).send("ส่งอีเมลไม่สำเร็จ");
+                }
             });
         });
     });
