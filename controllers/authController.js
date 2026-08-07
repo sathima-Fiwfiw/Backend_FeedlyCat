@@ -147,13 +147,17 @@ exports.forgotPassword = (req, res) => {
             db.query(insertSql, [email, token], (err) => {
                 if (err) return res.status(500).send("สร้าง Token ไม่สำเร็จ");
                 // 6. ตั้งค่าคนส่ง (Transporter)
-                const transporter = nodemailer.createTransport({
-                    service: 'gmail',
+                // 6. ตั้งค่าคนส่ง (Transporter)
+            const transporter = nodemailer.createTransport({
+                service: 'gmail',
                     auth: {
                         user: 'feedlycat@gmail.com',  
                         pass: 'mfeoaceujplpizec'     
-                    }
-                });
+                        },
+                    connectionTimeout: 20000, // 20 วิ
+                    greetingTimeout: 20000,
+                    socketTimeout: 20000,
+            });
                 const mailOptions = {
                     from: 'FeedlyCat App <feedlycat@gmail.com>', // ชื่อผู้ส่ง
                     to: email, 
