@@ -148,15 +148,18 @@ exports.forgotPassword = (req, res) => {
                 if (err) return res.status(500).send("สร้าง Token ไม่สำเร็จ");
                 // 6. ตั้งค่าคนส่ง (Transporter)
                 // 6. ตั้งค่าคนส่ง (Transporter)
-            const transporter = nodemailer.createTransport({
-                service: 'gmail',
-                    auth: {
-                        user: 'feedlycat@gmail.com',  
-                        pass: 'mfeoaceujplpizec'     
-                        },
-                    connectionTimeout: 20000, // 20 วิ
-                    greetingTimeout: 20000,
-                    socketTimeout: 20000,
+        const transporter = nodemailer.createTransport({
+            host: 'smtp.gmail.com',
+            port: 465,
+            secure: true,
+            family: 4, // 🔒 บังคับ IPv4 เท่านั้น ตัดปัญหา IPv6 ENETUNREACH เด็ดขาด
+            auth: {
+                user: 'feedlycat@gmail.com',  
+                pass: 'mfeoaceujplpizec'     
+                },
+            connectionTimeout: 20000,
+            greetingTimeout: 20000,
+            socketTimeout: 20000,
             });
                 const mailOptions = {
                     from: 'FeedlyCat App <feedlycat@gmail.com>', // ชื่อผู้ส่ง
