@@ -1,55 +1,44 @@
 const db = require('../config/db');
-const { sendCommand, checkDeviceOnline } = require('../config/mqtt'); 
-const { deviceCache } = require('../config/mqtt'); // ดึง cache มาใช้
+const { sendCommand } = require('../config/mqtt');
 
-// ✅ เพิ่มอุปกรณ์: ตรวจสอบเครื่องซ้ำ -> ตรวจสอบ Hardware ID จริง -> บันทึก
-exports.addDevice = async (req, res) => {
+// ✅ เพิ่มอุปกรณ์: ตรวจสอบเครื่องซ้ำ -> บันทึกลง DB ทันที (ไม่ต้องรอ PING/ONLINE ก่อน)
+//    เหตุผล: firmware เช็คสถานะการลงทะเบียนของตัวเองผ่าน /verify (CHECK -> OK/UNKNOWN)
+//    ถ้าไปรอให้เครื่องตอบ ONLINE ก่อนถึงจะบันทึก จะกลายเป็น deadlock เพราะเครื่องที่ยังไม่เคย
+//    ถูกบันทึกในระบบ (ยังไม่เคยได้ OK จาก /verify) อาจยังไม่พร้อมตอบ PING กลับมา
+//    เลยต้องบันทึกก่อน แล้วให้สถานะออนไลน์/ออฟไลน์ค่อยอัปเดตทีหลังจาก lastSeen (isDeviceOnline) แทน
+exports.addDevice = (req, res) => {
     const { user_id, device_id, name } = req.body;
 
-    try {
-        // 1. ตรวจสอบในฐานข้อมูลก่อนว่ารหัสเครื่องนี้ถูกเพิ่มไปแล้วหรือยัง
-        const checkSql = "SELECT id FROM devices WHERE device_id = ?";
-        db.query(checkSql, [device_id], async (err, results) => {
+    if (!user_id || !device_id || !name) {
+        return res.status(400).json({ message: "ข้อมูลไม่ครบถ้วน" });
+    }
+
+    // 1. ตรวจสอบในฐานข้อมูลก่อนว่ารหัสเครื่องนี้ถูกเพิ่มไปแล้วหรือยัง
+    const checkSql = "SELECT id FROM devices WHERE device_id = ?";
+    db.query(checkSql, [device_id], (err, results) => {
+        if (err) {
+            console.error(err);
+            return res.status(500).json({ message: "เกิดข้อผิดพลาดในการตรวจสอบฐานข้อมูล" });
+        }
+
+        if (results.length > 0) {
+            // ❌ ถ้ามีเครื่องนี้ในระบบแล้ว ให้แจ้งเตือนและหยุดการทำงาน
+            return res.status(400).json({ 
+                message: "รหัสเครื่องนี้ถูกลงทะเบียนในระบบแล้ว ไม่สามารถเพิ่มซ้ำได้" 
+            });
+        }
+
+        // 2. ✅ ไม่ซ้ำ -> บันทึกลง Table devices ได้เลย (สถานะเริ่มต้นตั้งเป็น offline
+        //    รอให้เครื่องส่ง /status เข้ามาแล้ว isDeviceOnline() จะอัปเดตให้เองภายหลัง)
+        const insertSql = "INSERT INTO devices (user_id, device_id, name, status) VALUES (?, ?, ?, 'offline')";
+        db.query(insertSql, [user_id, device_id, name], (err, result) => {
             if (err) {
                 console.error(err);
-                return res.status(500).json({ message: "เกิดข้อผิดพลาดในการตรวจสอบฐานข้อมูล" });
+                return res.status(500).json({ message: "บันทึกข้อมูลไม่สำเร็จ" });
             }
-
-            if (results.length > 0) {
-                // ❌ ถ้ามีเครื่องนี้ในระบบแล้ว ให้แจ้งเตือนและหยุดการทำงาน
-                return res.status(400).json({ 
-                    message: "รหัสเครื่องนี้ถูกลงทะเบียนในระบบแล้ว ไม่สามารถเพิ่มซ้ำได้" 
-                });
-            }
-
-            // 2. ถ้ายังไม่มีใครใช้ ค่อยส่ง PING ไปหา Arduino เพื่อเช็คว่าเครื่องมีอยู่จริงและออนไลน์
-            try {
-                const isOnline = await checkDeviceOnline(device_id); 
-
-                if (!isOnline) {
-                    // ❌ ถ้า Arduino ไม่ตอบ (ID ผิด หรือ ไม่ได้เสียบปลั๊ก/ต่อเน็ต)
-                    return res.status(404).json({ 
-                        message: "ไม่มีเครื่อง ID นี้อยู่ หรือเครื่องไม่ได้เชื่อมต่อ" 
-                    });
-                }
-
-                // 3. ✅ ถ้าผ่านการตรวจสอบทั้งหมด จึงจะบันทึกลง Table devices
-                const insertSql = "INSERT INTO devices (user_id, device_id, name, status) VALUES (?, ?, ?, 'online')";
-                db.query(insertSql, [user_id, device_id, name], (err, result) => {
-                    if (err) return res.status(500).json({ message: "บันทึกข้อมูลไม่สำเร็จ" });
-                    res.json({ message: "เพิ่มอุปกรณ์สำเร็จ!", id: result.insertId });
-                });
-
-            } catch (mqttError) {
-                console.error("MQTT Error:", mqttError);
-                res.status(500).json({ message: "เกิดข้อผิดพลาดในการเชื่อมต่อกับเครื่อง" });
-            }
+            res.json({ message: "เพิ่มอุปกรณ์สำเร็จ!", id: result.insertId });
         });
-
-    } catch (error) {
-        console.error("System Error:", error);
-        res.status(500).json({ message: "เกิดข้อผิดพลาดของระบบ" });
-    }
+    });
 };
 
 // ✅ ดึงรายการอุปกรณ์: แสดงชื่อแมวที่ผูกกับ User นั้นๆ
