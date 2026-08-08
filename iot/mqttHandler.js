@@ -103,6 +103,34 @@ client.on('message', (topic, message) => {
         }
     }
 
+    // 4️⃣ ✅ NEW: เครื่องขอตรวจสอบว่าตัวเองลงทะเบียนในระบบแล้วหรือยัง (ส่งมาตอนบูตหรือ MQTT reconnect)
+    else if (topic.endsWith('/verify')) {
+        const msgStr = message.toString();
+        if (msgStr !== 'CHECK') return; // กันข้อความแปลกปลอม
+
+        const deviceId = topic.split('/')[2].toUpperCase();
+        const verifyResultTopic = `cat/feeder/${deviceId}/verify_result`;
+
+        console.log(`🔎 เครื่อง ${deviceId} ขอตรวจสอบการลงทะเบียน...`);
+
+        const sqlCheckDevice = "SELECT id FROM devices WHERE UPPER(device_id) = ?";
+        db.query(sqlCheckDevice, [deviceId], (err, results) => {
+            if (err) {
+                console.error("❌ Database Error (ตรวจสอบการลงทะเบียนเครื่อง):", err);
+                // ไม่ publish อะไรกลับตอน error ฝั่ง DB — ให้ Arduino ส่ง CHECK มาใหม่ในรอบถัดไป (retry ทุก 10 วิ)
+                return;
+            }
+
+            if (results.length > 0) {
+                client.publish(verifyResultTopic, "OK");
+                console.log(`✅ เครื่อง ${deviceId} พบในระบบแล้ว -> ตอบกลับ OK`);
+            } else {
+                client.publish(verifyResultTopic, "UNKNOWN");
+                console.log(`❌ เครื่อง ${deviceId} ยังไม่พบในระบบ -> ตอบกลับ UNKNOWN`);
+            }
+        });
+    }
+
     // 3️⃣ ✅ ใหม่: แมวกินเสร็จแล้ว (Arduino คำนวณปริมาณที่กินและส่งมา)
     else if (topic.endsWith('/eaten')) {
         try {

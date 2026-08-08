@@ -24,6 +24,7 @@ client.on('connect', () => {
     client.subscribe('cat/feeder/+/status'); // ✅ รับข้อมูลน้ำหนัก
     client.subscribe('cat/feeder/+/scan');   // ✅ รับข้อมูลการสแกน RFID
     client.subscribe('cat/feeder/+/eaten');  // ✅ รับข้อมูลปริมาณที่กิน
+    client.subscribe('cat/feeder/+/verify'); // ✅ NEW: รับคำขอตรวจสอบว่าเครื่องนี้ลงทะเบียนแล้วหรือยัง
 });
 
 // เช็คสถานะออนไลน์
