@@ -6,7 +6,7 @@ const db = require('../config/db');           // ดึงฐานข้อม�
 // ------------------------------------------------------------------
 client.on('message', (topic, message) => {
 
-    // ✅ [ใหม่] อัปเดตเวลาล่าสุดที่ได้รับข้อความจากเครื่องนี้
+    //อัปเดตเวลาล่าสุดที่ได้รับข้อความจากเครื่องนี้
     // ทุก topic ที่เข้ามา (scan, status, eaten) ถือว่าเครื่องยังออนไลน์อยู่
     // devicesController.js จะเอา lastSeen นี้ไปเช็คว่าเครื่อง online/offline
     const topicParts = topic.split('/');
@@ -44,9 +44,8 @@ client.on('message', (topic, message) => {
 
                     console.log(`✅ พบแมวในระบบ: ${catName} (Tag: ${rfid})`);
 
-                    // ----------------------------------------------------------
-                    // บันทึกข้อมูลลงตาราง feeding_logs (สถานะเริ่มต้น = กำลังกิน)
-                    // ----------------------------------------------------------
+                    // บันทึกข้อมูลลงตาราง feeding_logs (สถานะเริ่มต้น = กำลังกิน) 
+                
                     const sqlInsertLog = "INSERT INTO feeding_logs (device_id, cat_id, status) VALUES (?, ?, 'Scanned')";
                     db.query(sqlInsertLog, [deviceId, catId], (errLog, resultLog) => {
                         if (errLog) {
@@ -88,7 +87,8 @@ client.on('message', (topic, message) => {
                     ...global.deviceCache[deviceId],
                     tank_weight: data.tank_weight,
                     tray_weight: data.tray_weight,
-                    water_low: data.water_low === true // กันเหนียวกรณี field หาย ให้ default เป็น false
+                    water_low: data.water_low === true, // กันเหนียวกรณี field หาย ให้ default เป็น false
+                    is_eating: data.is_eating === true 
                 };
                 console.log(`⚖️ [RAM Cache] เครื่อง ${deviceId} | ถัง: ${data.tank_weight}g | ถาด: ${data.tray_weight}g | น้ำ: ${data.water_low ? '⚠️ ใกล้หมด' : '✅ ปกติ'}`);
 
@@ -197,7 +197,7 @@ client.on('message', (topic, message) => {
 
 
 // ------------------------------------------------------------------
-// 🔔 เช็คเกณฑ์แจ้งเตือนอาหารใกล้หมด (เทียบน้ำหนักถังกับค่าที่ตั้งไว้ในหน้าแอป)
+//  เช็คเกณฑ์แจ้งเตือนอาหารใกล้หมด (เทียบน้ำหนักถังกับค่าที่ตั้งไว้ในหน้าแอป)
 // เรียกทุกครั้งที่ได้รับ /status จาก Arduino (ทุก ~5 วินาที)
 // ------------------------------------------------------------------
 
@@ -241,7 +241,7 @@ function checkLowFoodAlert(deviceId, tankWeight) {
 }
 
 // ------------------------------------------------------------------
-// 💧 เช็คสถานะน้ำใกล้หมด (จากเซนเซอร์ XKC-Y25V ที่ Arduino ส่งมาเป็น water_low: true/false)
+// เช็คสถานะน้ำใกล้หมด (จากเซนเซอร์ XKC-Y25V ที่ Arduino ส่งมาเป็น water_low: true/false)
 // เรียกทุกครั้งที่ได้รับ /status จาก Arduino (ทุก ~5 วินาที) เหมือนกับของอาหาร
 // ------------------------------------------------------------------
 

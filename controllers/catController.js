@@ -1,6 +1,5 @@
 const db = require('../config/db');
 
-// --- เพิ่มฟังก์ชันใหม่สำหรับ Hardware (RFID Reader) ---
 // ส่วนนี้ใช้บันทึกเมื่อแมวมาสแกน Tag แล้วกินอาหาร
 exports.recordFeeding = (req, res) => {
     const { rfid_tag, food_amount } = req.body;
@@ -73,7 +72,7 @@ exports.addCat = (req, res) => {
     });
 };
 
-// --- แก้ไขข้อมูลแมว (รวมถึงการ Set Tag จากหน้าแอป) ---
+// --- แก้ไขข้อมูลแมว ---
 exports.updateCat = (req, res) => {
     // รับค่าจากแอปฯ รวมถึง rfid_tag และ note
     const { cat_id, name_cat, birthday, gender, rfid_tag, note } = req.body;
@@ -103,11 +102,10 @@ exports.updateCat = (req, res) => {
     });
 };
 // ดึงข้อมูลแมว
-// ในไฟล์ catController.js
 exports.getCats = (req, res) => {
     const { user_id } = req.params;
     
-    // --- [จุดแก้ไข] ใช้ DATE_FORMAT ห่อฟิลด์ birthday ---
+    // --- ใช้ DATE_FORMAT ห่อฟิลด์ birthday ---
     const sql = `
         SELECT 
             cat_id, 
