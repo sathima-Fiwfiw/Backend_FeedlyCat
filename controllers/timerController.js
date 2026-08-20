@@ -2,8 +2,8 @@ const db = require('../config/db');
 
 // 1. เพิ่มการตั้งเวลา (Add Schedule)
 exports.addSchedule = (req, res) => {
+    
     // รับค่าจากหน้าบ้าน (Flutter)
-    // หมายเหตุ: repeat เป็นคำสงวนในบาง DB เลยใช้ชื่อตัวแปร repeat_day แทนในโค้ดก็ได้
     const { device_id, time, portion, repeat_day } = req.body; 
 
     if (!device_id || !time) {
@@ -11,7 +11,7 @@ exports.addSchedule = (req, res) => {
     }
 
     // SQL สำหรับบันทึกลงตาราง schedules
-    // ใช้ `repeat` (มี backtick) เพราะอาจซ้ำกับคำสั่ง SQL
+    // ใช้ `repeat` (มี backtick ตัวเปิดปิด) เพราะอาจซ้ำกับคำสั่ง SQL
     const sql = "INSERT INTO schedules (device_id, `time`, portion, `repeat`, is_active) VALUES (?, ?, ?, ?, 1)";
     
     db.query(sql, [device_id, time, portion || 1, repeat_day || 'Everyday'], (err, result) => {
@@ -37,7 +37,7 @@ exports.getSchedules = (req, res) => {
     });
 };
 
-// 3. ลบเวลา (Delete Schedule)
+// 3. ลบเวลา 
 exports.deleteSchedule = (req, res) => {
     const { schedule_id } = req.body;
 
@@ -52,7 +52,7 @@ exports.deleteSchedule = (req, res) => {
     });
 };
 
-// 4. เปิด/ปิด การใช้งาน (Toggle Active) - เอาคอมเมนต์ออกแล้ว ✅
+// 4. เปิด/ปิด การใช้งาน (Toggle Active) 
 exports.toggleSchedule = (req, res) => {
     const { schedule_id, is_active } = req.body; // รับค่า 1 หรือ 0
 

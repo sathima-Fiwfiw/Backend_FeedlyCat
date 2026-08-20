@@ -1,6 +1,6 @@
 const db = require('../config/db');
 
-// ส่วนนี้ใช้บันทึกเมื่อแมวมาสแกน Tag แล้วกินอาหาร
+// บันทึกเมื่อแมวมาสแกน Tag แล้วกินอาหาร
 exports.recordFeeding = (req, res) => {
     const { rfid_tag, food_amount } = req.body;
 
@@ -74,7 +74,7 @@ exports.addCat = (req, res) => {
 
 // --- แก้ไขข้อมูลแมว ---
 exports.updateCat = (req, res) => {
-    // รับค่าจากแอปฯ รวมถึง rfid_tag และ note
+    // รับค่าจากแอป รวมถึง rfid_tag และ note
     const { cat_id, name_cat, birthday, gender, rfid_tag, note } = req.body;
     const newImage = req.file ? req.file.path : null;
 

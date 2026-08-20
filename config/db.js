@@ -1,9 +1,9 @@
-//เราแยกส่วนต่อ Database ออกมา เพื่อให้ไฟล์อื่นเรียกใช้ได้ง่ายๆ ไม่ต้องเขียนซ้ำ
+
 
 require('dotenv').config();
 const mysql = require('mysql2');
 
-// ในไฟล์ db.js
+
 const db = mysql.createPool({
     host: process.env.DB_HOST,
     user: process.env.DB_USER,

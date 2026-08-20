@@ -19,7 +19,7 @@ client.on('message', (topic, message) => {
         global.deviceCache[msgDeviceId].lastSeen = Date.now();
     }
 
-    // 1️⃣ ตรวจสอบว่าเป็นข้อมูลการสแกนบัตร (RFID) หรือไม่
+    // 1️ ตรวจสอบว่าเป็นข้อมูลการสแกนบัตร (RFID) หรือไม่ แมวเข้ามากินอาหาร
     if (topic.endsWith('/scan')) {
         try {
             const data = JSON.parse(message.toString());
@@ -45,7 +45,6 @@ client.on('message', (topic, message) => {
                     console.log(`✅ พบแมวในระบบ: ${catName} (Tag: ${rfid})`);
 
                     // บันทึกข้อมูลลงตาราง feeding_logs (สถานะเริ่มต้น = กำลังกิน) 
-                
                     const sqlInsertLog = "INSERT INTO feeding_logs (device_id, cat_id, status) VALUES (?, ?, 'Scanned')";
                     db.query(sqlInsertLog, [deviceId, catId], (errLog, resultLog) => {
                         if (errLog) {
@@ -78,11 +77,11 @@ client.on('message', (topic, message) => {
             const deviceId = topic.split('/')[2].toUpperCase(); 
 
             if (data.tank_weight !== undefined) {
-                // ✅ สร้าง global.deviceCache ถ้ายังไม่มี
+                //  สร้าง global.deviceCache ถ้ายังไม่มี
                 if (!global.deviceCache) global.deviceCache = {};
                 
-                // ✅ บันทึกลงตัวแปร Global (รวม water_low ที่ Arduino ส่งมาจากเซนเซอร์ XKC-Y25V)
-                // ⚠️ ใช้ ...global.deviceCache[deviceId] เพื่อไม่ให้ lastSeen ที่เพิ่งเซ็ตด้านบนหาย
+                //  บันทึกลงตัวแปร Global (รวม water_low ที่ Arduino ส่งมาจากเซนเซอร์ XKC-Y25V)
+                //  ใช้ ...global.deviceCache[deviceId] เพื่อไม่ให้ lastSeen ที่เพิ่งเซ็ตด้านบนหาย
                 global.deviceCache[deviceId] = {
                     ...global.deviceCache[deviceId],
                     tank_weight: data.tank_weight,
@@ -195,11 +194,9 @@ client.on('message', (topic, message) => {
 });
 
 
-
-// ------------------------------------------------------------------
+//แจ้งเตือนอาหารใกล้หมด 
 //  เช็คเกณฑ์แจ้งเตือนอาหารใกล้หมด (เทียบน้ำหนักถังกับค่าที่ตั้งไว้ในหน้าแอป)
 // เรียกทุกครั้งที่ได้รับ /status จาก Arduino (ทุก ~5 วินาที)
-// ------------------------------------------------------------------
 
 // เก็บสถานะ "แจ้งเตือนไปแล้วหรือยัง" ของแต่ละเครื่องไว้ใน RAM
 // เพื่อไม่ให้สร้าง notification ซ้ำทุก 5 วินาทีตราบใดที่น้ำหนักยังต่ำกว่าเกณฑ์อยู่
@@ -240,10 +237,8 @@ function checkLowFoodAlert(deviceId, tankWeight) {
     });
 }
 
-// ------------------------------------------------------------------
 // เช็คสถานะน้ำใกล้หมด (จากเซนเซอร์ XKC-Y25V ที่ Arduino ส่งมาเป็น water_low: true/false)
 // เรียกทุกครั้งที่ได้รับ /status จาก Arduino (ทุก ~5 วินาที) เหมือนกับของอาหาร
-// ------------------------------------------------------------------
 
 // เก็บสถานะ "แจ้งเตือนไปแล้วหรือยัง" ของแต่ละเครื่องไว้ใน RAM
 // เพื่อไม่ให้สร้าง notification ซ้ำทุก 5 วินาทีตราบใดที่น้ำยังใกล้หมดอยู่

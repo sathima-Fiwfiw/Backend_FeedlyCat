@@ -1,4 +1,5 @@
 // ใน cronJob.js ตรงจังหวะที่ส่ง MQTT
+//รันตามเวลาที่ตั้งไว้อัตโนมัติ
 results.forEach(schedule => {
     const deviceId = schedule.device_id;
     const amount = schedule.portion; // ดึงปริมาณที่ตั้งไว้ในฐานข้อมูล

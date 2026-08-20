@@ -4,7 +4,7 @@ const BREVO_API_KEY = process.env.BREVO_API_KEY; // ดึง API Key จาก 
 const BREVO_SENDER_EMAIL = process.env.BREVO_SENDER_EMAIL || 'feedlycat@gmail.com'; // ต้องไป verify อีเมลนี้ใน Brevo dashboard ก่อน (Senders > Add a sender)
 const BREVO_SENDER_NAME = 'FeedlyCat App';
 
-// ฟังก์ชันช่วยส่งอีเมลผ่าน Brevo API
+// ฟังก์ชันช่วยส่งอีเมลผ่าน Brevo API เพราะ rander ฟรี บล็อค smtp เลยใช้ brevo ช่วยส่งแทน
 async function sendBrevoEmail({ to, subject, html }) {
     const response = await fetch('https://api.brevo.com/v3/smtp/email', {
         method: 'POST',
@@ -34,7 +34,6 @@ async function sendBrevoEmail({ to, subject, html }) {
 // Register
 exports.register = (req, res) => {
     const { name, email, password, phone } = req.body;
-    
     const img_profile = req.file ? req.file.path : null;
     if (!name || !email || !password || !phone) {
         return res.status(400).json({ message: "กรุณากรอกข้อมูลให้ครบทุกช่อง" });
@@ -44,31 +43,38 @@ exports.register = (req, res) => {
     }
     const checkSql = "SELECT * FROM user WHERE email = ? OR phone = ?";
     db.query(checkSql, [email, phone], (err, results) => {
-        if (err) {
-            console.error(err);
-            return res.status(500).json({ message: "Database Error" });
-        }
+        if (err) return res.status(500).json({ message: "Database Error" });
         if (results.length > 0) {
             const existingUser = results[0];
-            if (existingUser.email === email) {
-                return res.status(400).json({ message: "Email นี้ถูกใช้งานแล้ว" });
-            }
-            if (existingUser.phone === phone) {
-                return res.status(400).json({ message: "เบอร์โทรศัพท์นี้ถูกใช้งานแล้ว" });
-            }
+            if (existingUser.email === email) return res.status(400).json({ message: "Email นี้ถูกใช้งานแล้ว" });
+            if (existingUser.phone === phone) return res.status(400).json({ message: "เบอร์โทรศัพท์นี้ถูกใช้งานแล้ว" });
         }
-        const insertSql = "INSERT INTO user (name, email, password, phone, img_profile) VALUES (?, ?, ?, ?, ?)";
-        db.query(insertSql, [name, email, password, phone, img_profile], (err, result) => {
-            if (err) {
-                console.error(err);
-                return res.status(500).json({ message: "เกิดข้อผิดพลาดในการสมัครสมาชิก" });
-            }
-            
-            res.json({
-                message: "สมัครสมาชิกเรียบร้อย!",
-                user_id: result.insertId,
-                name: name,
-                img_profile: img_profile 
+        const insertSql = "INSERT INTO user (name, email, password, phone, img_profile, is_verified) VALUES (?, ?, ?, ?, ?, 0)";
+        db.query(insertSql, [name, email, password, phone, img_profile], async (err, result) => {
+            if (err) return res.status(500).json({ message: "เกิดข้อผิดพลาดในการสมัครสมาชิก" });
+
+            const token = Math.floor(100000 + Math.random() * 900000).toString();
+            db.query("DELETE FROM password_resets WHERE email = ?", [email], async () => {
+                db.query("INSERT INTO password_resets (email, token) VALUES (?, ?)", [email, token], async (err) => {
+                    if (err) return res.status(500).json({ message: "สร้าง OTP ไม่สำเร็จ" });
+
+                    try {
+                        await sendBrevoEmail({
+                            to: email,
+                            subject: 'ยืนยันอีเมลของคุณ (FeedlyCat)',
+                            html: `<h2>รหัสยืนยัน: ${token}</h2><p>หมดอายุใน 15 นาที</p>`,
+                        });
+                        res.json({
+                            message: "สมัครสมาชิกสำเร็จ กรุณายืนยัน OTP ที่ส่งไปยังอีเมล",
+                            user_id: result.insertId,
+                            email: email,
+                        });
+                    } catch (e) {
+                        console.log("Brevo Error:", e.message);
+                        // ยังให้สมัครผ่าน แม้ส่งเมลพลาด เผื่อ resend ทีหลัง
+                        res.json({ message: "สมัครสำเร็จ แต่ส่งอีเมลไม่สำเร็จ กรุณาขอ OTP ใหม่", user_id: result.insertId, email });
+                    }
+                });
             });
         });
     });
@@ -98,6 +104,9 @@ exports.login = (req, res) => {
         if (password !== user.password) {
             return res.status(401).json({ message: "รหัสผ่านไม่ถูกต้อง" });
         }
+        if (user.is_verified === 0) {
+            return res.status(403).json({ message: "กรุณายืนยันอีเมลก่อนเข้าสู่ระบบ" });
+        }
         res.json({
             message: "เข้าสู่ระบบสำเร็จ!",
             user: {
@@ -116,7 +125,7 @@ exports.login = (req, res) => {
 exports.updateProfile = (req, res) => {
     const { user_id, name } = req.body;
     
-    // เช็คว่ามีการส่งไฟล์รูปมาใหม่ไหม?
+    // เช็คว่ามีการส่งไฟล์รูปมาใหม่ไหม
     // ถ้ามี: ใช้ลิงค์ใหม่จาก Cloudinary (req.file.path)
     // ถ้าไม่มี: ให้เป็น null (เดี๋ยวเราจะเขียน logic ไม่ให้ทับของเดิม)
     const new_img_profile = req.file ? req.file.path : null;
@@ -157,18 +166,18 @@ exports.updateProfile = (req, res) => {
 
 // ฟังก์ชันลืมรหัสผ่าน (ส่ง OTP)
 exports.forgotPassword = (req, res) => {
-    // 1. รับค่า email มาเป็นอันดับแรกสุด! (สำคัญมาก)
+    // 1. รับค่า email มาเป็นอันดับแรกสุด
     const { email } = req.body;
     if (!email) {
         return res.status(400).send("กรุณากรอกอีเมล");
     }
-    // 2. เช็คว่ามี User อีเมลนี้ในระบบไหม?
+    // 2. เช็คว่ามี User อีเมลนี้ในระบบไหม
     db.query("SELECT * FROM user WHERE email = ?", [email], (err, results) => {
         if (err) return res.status(500).send("Database Error");
         if (results.length === 0) return res.status(404).send("ไม่พบอีเมลนี้ในระบบ");
         // 3. สร้าง OTP สุ่ม 6 หลัก
         const token = Math.floor(100000 + Math.random() * 900000).toString();
-        // 4. ลบ Token เก่าทิ้งก่อน (ถ้ามี)
+        // 4. ลบ Token เก่าทิ้งก่อน
         db.query("DELETE FROM password_resets WHERE email = ?", [email], (err) => {
             if (err) console.log(err);
             // 5. บันทึก Token ใหม่ลง Database
@@ -176,8 +185,8 @@ exports.forgotPassword = (req, res) => {
             db.query(insertSql, [email, token], async (err) => {
                 if (err) return res.status(500).send("สร้าง Token ไม่สำเร็จ");
 
-                // 6. ✅ ส่งเมลผ่าน Resend (แทน nodemailer เดิม)
-                //    ใช้ HTTP API ไม่ใช่ SMTP port เลย จึงไม่ถูก Render Free Tier บล็อก
+                // 6.  ส่งเมลผ่าน Resend 
+                //    ใช้ HTTP API ไม่ใช่ SMTP port 
                 const htmlContent = `
                     <div style="font-family: 'Sarabun', sans-serif; max-width: 500px; margin: auto; padding: 20px; border: 1px solid #ddd; border-radius: 10px; background-color: #ffffff;">
                         <h2 style="color: #4FC3F7; text-align: center;">FeedlyCat 🐱</h2>
@@ -274,6 +283,24 @@ exports.changePassword = (req, res) => {
         db.query("UPDATE user SET password = ? WHERE user_id = ?", [newPassword, user_id], (err) => {
             if (err) return res.status(500).json({ message: "Update Error" });
             res.json({ message: "เปลี่ยนรหัสผ่านสำเร็จ!" });
+        });
+    });
+};
+
+exports.verifyEmail = (req, res) => {
+    const { email, token } = req.body;
+    if (!email || !token) return res.status(400).json({ message: "ข้อมูลไม่ครบถ้วน" });
+
+    const sql = `SELECT * FROM password_resets WHERE email = ? AND token = ? AND created_at > NOW() - INTERVAL 15 MINUTE`;
+    db.query(sql, [email, token], (err, results) => {
+        if (err) return res.status(500).json({ message: "Database Error" });
+        if (results.length === 0) return res.status(400).json({ message: "รหัส OTP ไม่ถูกต้องหรือหมดอายุ" });
+
+        db.query("UPDATE user SET is_verified = 1 WHERE email = ?", [email], (err) => {
+            if (err) return res.status(500).json({ message: "Update Error" });
+            db.query("DELETE FROM password_resets WHERE email = ?", [email], () => {
+                res.json({ message: "ยืนยันอีเมลสำเร็จ! กรุณาเข้าสู่ระบบ" });
+            });
         });
     });
 };

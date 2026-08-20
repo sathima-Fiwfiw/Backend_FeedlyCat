@@ -61,7 +61,7 @@ router.get('/cats/:user_id', catController.getCats);
 router.post('/update-cat', upload.single('image'), catController.updateCat);//แก้ไขข้อมูลแมว
 router.post('/delete-cat', catController.deleteCat); // เส้นสำหรับลบแมว
 router.post('/record-feeding', catController.recordFeeding);
-router.get('/feeding-stats/:cat_id', feedingStatController.getFeedingStats); // ✅ สรุปข้อมูลกราฟการกิน
+router.get('/feeding-stats/:cat_id', feedingStatController.getFeedingStats); // สรุปข้อมูลกราฟการกิน
 
 router.post('/add-schedule', timerController.addSchedule); // เพิ่มเวลา
 router.get('/schedules/:device_id', timerController.getSchedules); // ดึงเวลาทั้งหมดของเครื่อง
@@ -69,14 +69,12 @@ router.post('/delete-schedule', timerController.deleteSchedule); // ลบเว
 router.post('/toggle-schedule', timerController.toggleSchedule); // เปิด/ปิดเวลา
 
 // --- แจ้งเตือนต่างๆ ---
-// --- แจ้งเตือนต่างๆ ใน api.js ---
-
-// เปลี่ยนชื่อฟังก์ชันให้ตรงกับ Controller ที่เราแก้
 router.post('/add-notification', notificationController.addNotification); // Route สำหรับเพิ่มการแจ้งเตือนใหม่ (ใช้กับหน้า NotificationPage)
 
 router.get('/notifications/:user_id', notificationController.getNotifications);// Route สำหรับดึงประวัติการแจ้งเตือนของผู้ใช้ (ใช้กับหน้า NotificationPage)
 router.post('/mark-read', notificationController.markAsRead);// Route สำหรับกดอ่านแล้ว (ใช้กับหน้า NotificationPage)
 router.post('/delete-notification', notificationController.deleteNotification); // ✅ ลบการแจ้งเตือนทีละรายการ (swipe-to-delete)
+router.post('/verify-email', authController.verifyEmail);//ยืนยันตัวตน
 
 
 module.exports = router;

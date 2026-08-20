@@ -1,11 +1,7 @@
 const db = require('../config/db');
 const { sendCommand } = require('../config/mqtt');
 
-// ✅ เพิ่มอุปกรณ์: ตรวจสอบเครื่องซ้ำ -> บันทึกลง DB ทันที (ไม่ต้องรอ PING/ONLINE ก่อน)
-//    เหตุผล: firmware เช็คสถานะการลงทะเบียนของตัวเองผ่าน /verify (CHECK -> OK/UNKNOWN)
-//    ถ้าไปรอให้เครื่องตอบ ONLINE ก่อนถึงจะบันทึก จะกลายเป็น deadlock เพราะเครื่องที่ยังไม่เคย
-//    ถูกบันทึกในระบบ (ยังไม่เคยได้ OK จาก /verify) อาจยังไม่พร้อมตอบ PING กลับมา
-//    เลยต้องบันทึกก่อน แล้วให้สถานะออนไลน์/ออฟไลน์ค่อยอัปเดตทีหลังจาก lastSeen (isDeviceOnline) แทน
+// 1. เพิ่มอุปกรณ์: ตรวจสอบเครื่องซ้ำ -> บันทึกลง DB ทันที (ไม่ต้องรอ PING/ONLINE ก่อน)
 exports.addDevice = (req, res) => {
     const { user_id, device_id, name } = req.body;
 
@@ -28,7 +24,7 @@ exports.addDevice = (req, res) => {
             });
         }
 
-        // 2. ✅ ไม่ซ้ำ -> บันทึกลง Table devices ได้เลย (สถานะเริ่มต้นตั้งเป็น offline
+        // 2. ไม่ซ้ำ -> บันทึกลง Table devices ได้เลย (สถานะเริ่มต้นตั้งเป็น offline
         //    รอให้เครื่องส่ง /status เข้ามาแล้ว isDeviceOnline() จะอัปเดตให้เองภายหลัง)
         const insertSql = "INSERT INTO devices (user_id, device_id, name, status) VALUES (?, ?, ?, 'offline')";
         db.query(insertSql, [user_id, device_id, name], (err, result) => {
@@ -41,7 +37,7 @@ exports.addDevice = (req, res) => {
     });
 };
 
-// ✅ ดึงรายการอุปกรณ์: แสดงชื่อแมวที่ผูกกับ User นั้นๆ
+// 2.ดึงรายการอุปกรณ์: แสดงชื่อแมวที่ผูกกับ User นั้นๆ
 exports.getDevices = (req, res) => {
     const { user_id } = req.params;
     const sql = `
@@ -54,7 +50,7 @@ exports.getDevices = (req, res) => {
     });
 };
 
-// ✅ แก้ไขข้อมูลอุปกรณ์
+// 3. แก้ไขข้อมูลอุปกรณ์
 exports.updateDevice = (req, res) => {
     const { id, device_id, name } = req.body;
     const sql = "UPDATE devices SET device_id = ?, name = ? WHERE id = ?";
@@ -64,7 +60,7 @@ exports.updateDevice = (req, res) => {
     });
 };
 
-// ✅ ลบอุปกรณ์
+// 4.ลบอุปกรณ์
 exports.deleteDevice = (req, res) => {
     const { id } = req.body;
     const sql = "DELETE FROM devices WHERE id = ?";
@@ -74,11 +70,10 @@ exports.deleteDevice = (req, res) => {
     });
 };
 
-// ------------------------------------------------------------------
-// ✅ [ใหม่] เช็คว่าเครื่องยังออนไลน์อยู่จริงไหม โดยดูจาก "เวลาล่าสุด"
-// ที่ mqttHandler.js อัปเดต global.deviceCache[deviceId].lastSeen
+
+// เช็คว่าเครื่องยังออนไลน์อยู่จริงไหม โดยดูจาก "เวลาล่าสุด"
+// ที่ mqttHandler.js อัปเดต 
 // (เครื่องส่ง /status เข้ามาทุก 5 วิ ถ้าเงียบเกิน 15 วิ ถือว่าออฟไลน์)
-// ------------------------------------------------------------------
 const ONLINE_THRESHOLD_MS = 15000;
 
 function isDeviceOnline(deviceId) {
@@ -88,7 +83,7 @@ function isDeviceOnline(deviceId) {
     return (Date.now() - status.lastSeen) < ONLINE_THRESHOLD_MS;
 }
 
-// ✅ สั่งให้อาหาร: เช็คออนไลน์ก่อนเสมอ ห้ามสั่งถ้าเครื่องไม่ได้เชื่อมต่อ
+// 5. สั่งให้อาหาร: เช็คออนไลน์ก่อนเสมอ ห้ามสั่งถ้าเครื่องไม่ได้เชื่อมต่อ
 exports.feedDevice = (req, res) => {
     // รับ amount มาจากแอปด้วย
     const { id, amount } = req.body; 
@@ -115,7 +110,7 @@ exports.feedDevice = (req, res) => {
     });
 };
 
-// ✅ ดูสถานะน้ำหนัก/น้ำ: ถ้าออฟไลน์ ไม่ส่งค่าตัวเลข (ส่ง null) พร้อม flag online ให้แอปไปแสดง UI เอง
+// 6. ดูสถานะน้ำหนัก/น้ำ: ถ้าออฟไลน์ ไม่ส่งค่าตัวเลข (ส่ง null) พร้อม flag online ให้แอปไปแสดง UI เอง
 exports.getDeviceFoodStatus = (req, res) => {
     const device_id = req.params.device_id.toUpperCase();
 
@@ -124,7 +119,7 @@ exports.getDeviceFoodStatus = (req, res) => {
 
     const online = isDeviceOnline(device_id);
 
-    // ✅ ต้องดึงจาก global.deviceCache ให้ตรงกัน
+    //  ต้องดึงจาก global.deviceCache ให้ตรงกัน
     const status = global.deviceCache[device_id] || { tank_weight: 0, tray_weight: 0, water_low: false };
     
     console.log(`📤 [API SEND] ส่งไปที่แอป -> ${online ? '🟢 ออนไลน์' : '🔴 ออฟไลน์'} | ถัง: ${status.tank_weight}g | ถาด: ${status.tray_weight}g | น้ำ: ${status.water_low ? '⚠️ ใกล้หมด' : '✅ ปกติ'}`);

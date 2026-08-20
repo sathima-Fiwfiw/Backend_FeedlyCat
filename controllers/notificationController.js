@@ -1,7 +1,7 @@
 // controllers/notificationController.js
 const db = require('../config/db');
 
-// 1. ✅ บันทึก "เกณฑ์แจ้งเตือน" ของเครื่อง (ไม่ใช่การสร้างแจ้งเตือนทันที)
+// 1.  บันทึก "แจ้งเตือน" ของเครื่อง ไม่ได้แจ้งเตือนทันที
 //    ระบบจะคอยเทียบน้ำหนักจริงจาก MQTT กับเกณฑ์นี้ใน mqttHandler.js
 //    แล้วค่อยสร้างแจ้งเตือนจริงตอนน้ำหนักต่ำกว่าเกณฑ์
 exports.addNotification = (req, res) => {
@@ -11,7 +11,7 @@ exports.addNotification = (req, res) => {
         return res.status(400).json({ message: "ข้อมูลไม่ครบถ้วน" });
     }
 
-    // upsert: ถ้าเครื่องนี้เคยตั้งค่าไว้แล้ว ให้อัปเดตทับ ถ้ายังไม่เคย ให้สร้างใหม่
+    //  ถ้าเครื่องนี้เคยตั้งค่าไว้แล้ว ให้อัปเดตทับ ถ้ายังไม่เคย ให้สร้างใหม่
     const sql = `
         INSERT INTO device_alert_settings (device_id, title, threshold_gram)
         VALUES (?, ?, ?)
@@ -74,7 +74,7 @@ exports.markAsRead = (req, res) => {
     });
 };
 
-// 4. ✅ ลบการแจ้งเตือนทีละรายการ (ใช้กับ swipe-to-delete ในแอป)
+// 4. ลบการแจ้งเตือนทีละรายการ (ใช้กับ swipe-to-delete ในแอป)
 exports.deleteNotification = (req, res) => {
     const { id } = req.body;
 
