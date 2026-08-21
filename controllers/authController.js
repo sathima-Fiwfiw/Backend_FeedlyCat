@@ -1,4 +1,6 @@
 const db = require('../config/db');
+const bcrypt = require('bcryptjs'); // ✅ ใช้แฮสรหัสผ่าน (ต้องรัน: npm install bcryptjs)
+const SALT_ROUNDS = 10;
 // ✅ เปลี่ยนจาก Resend มาเป็น Brevo (Sendinblue) — ใช้ HTTP API ตรงๆ ผ่าน fetch ไม่ต้องลง package เพิ่ม
 const BREVO_API_KEY = process.env.BREVO_API_KEY; // ดึง API Key จาก Environment Variable
 const BREVO_SENDER_EMAIL = process.env.BREVO_SENDER_EMAIL || 'feedlycat@gmail.com'; // ต้องไป verify อีเมลนี้ใน Brevo dashboard ก่อน (Senders > Add a sender)
@@ -42,15 +44,24 @@ exports.register = (req, res) => {
         return res.status(400).json({ message: "รหัสผ่านต้องมีอย่างน้อย 6 ตัวอักษร" });
     }
     const checkSql = "SELECT * FROM user WHERE email = ? OR phone = ?";
-    db.query(checkSql, [email, phone], (err, results) => {
+    db.query(checkSql, [email, phone], async (err, results) => {
         if (err) return res.status(500).json({ message: "Database Error" });
         if (results.length > 0) {
             const existingUser = results[0];
             if (existingUser.email === email) return res.status(400).json({ message: "Email นี้ถูกใช้งานแล้ว" });
             if (existingUser.phone === phone) return res.status(400).json({ message: "เบอร์โทรศัพท์นี้ถูกใช้งานแล้ว" });
         }
+
+        // ✅ แฮสรหัสผ่านก่อนเก็บลง Database (ไม่เก็บ plain text)
+        let hashedPassword;
+        try {
+            hashedPassword = await bcrypt.hash(password, SALT_ROUNDS);
+        } catch (e) {
+            return res.status(500).json({ message: "เกิดข้อผิดพลาดในการเข้ารหัสรหัสผ่าน" });
+        }
+
         const insertSql = "INSERT INTO user (name, email, password, phone, img_profile, is_verified) VALUES (?, ?, ?, ?, ?, 0)";
-        db.query(insertSql, [name, email, password, phone, img_profile], async (err, result) => {
+        db.query(insertSql, [name, email, hashedPassword, phone, img_profile], async (err, result) => {
             if (err) return res.status(500).json({ message: "เกิดข้อผิดพลาดในการสมัครสมาชิก" });
 
             const token = Math.floor(100000 + Math.random() * 900000).toString();
@@ -89,7 +100,7 @@ exports.login = (req, res) => {
     }
 
     const sql = "SELECT * FROM user WHERE email = ?";
-    db.query(sql, [email], (err, results) => {
+    db.query(sql, [email], async (err, results) => {
         if (err) {
             console.error(err);
             return res.status(500).json({ message: "Database Error" });
@@ -101,7 +112,9 @@ exports.login = (req, res) => {
 
         const user = results[0];
 
-        if (password !== user.password) {
+        // ✅ เทียบรหัสผ่านที่กรอกกับ hash ที่เก็บไว้ใน Database
+        const isMatch = await bcrypt.compare(password, user.password);
+        if (!isMatch) {
             return res.status(401).json({ message: "รหัสผ่านไม่ถูกต้อง" });
         }
         if (user.is_verified === 0) {
@@ -238,16 +251,24 @@ exports.resetPassword = (req, res) => {
                  AND token = ? 
                  AND created_at > NOW() - INTERVAL 15 MINUTE`;
 
-    db.query(sql, [email, token], (err, results) => {
+    db.query(sql, [email, token], async (err, results) => {
         if (err) return res.status(500).send("Database Error");
 
         if (results.length === 0) {
             return res.status(400).send("รหัส OTP ไม่ถูกต้อง หรือหมดอายุแล้ว");
         }
 
+        // ✅ แฮสรหัสผ่านใหม่ก่อนบันทึก
+        let hashedPassword;
+        try {
+            hashedPassword = await bcrypt.hash(newPassword, SALT_ROUNDS);
+        } catch (e) {
+            return res.status(500).send("เกิดข้อผิดพลาดในการเข้ารหัสรหัสผ่าน");
+        }
+
         // 2. ถ้าผ่าน -> อัปเดตรหัสผ่านใหม่ที่ตาราง User
         const updateSql = "UPDATE user SET password = ? WHERE email = ?";
-        db.query(updateSql, [newPassword, email], (err) => {
+        db.query(updateSql, [hashedPassword, email], (err) => {
             if (err) return res.status(500).send("Update Password Error");
 
             // 3. ลบ Token ทิ้งทันทีเมื่อใช้เสร็จแล้ว
@@ -268,25 +289,35 @@ exports.changePassword = (req, res) => {
     }
 
     // 2. ดึงรหัสผ่านเดิมจาก Database มาเทียบ
-    db.query("SELECT password FROM user WHERE user_id = ?", [user_id], (err, results) => {
+    db.query("SELECT password FROM user WHERE user_id = ?", [user_id], async (err, results) => {
         if (err) return res.status(500).json({ message: "Database Error" });
         if (results.length === 0) return res.status(404).json({ message: "ไม่พบผู้ใช้" });
 
         const user = results[0];
 
         // 3. ตรวจสอบว่ารหัสเดิมถูกต้องไหม
-        if (user.password !== oldPassword) {
+        const isMatch = await bcrypt.compare(oldPassword, user.password);
+        if (!isMatch) {
             return res.status(401).json({ message: "รหัสผ่านเดิมไม่ถูกต้อง" });
         }
 
+        // ✅ แฮสรหัสผ่านใหม่ก่อนบันทึก
+        let hashedPassword;
+        try {
+            hashedPassword = await bcrypt.hash(newPassword, SALT_ROUNDS);
+        } catch (e) {
+            return res.status(500).json({ message: "เกิดข้อผิดพลาดในการเข้ารหัสรหัสผ่าน" });
+        }
+
         // 4. ถ้าถูก -> อัปเดตรหัสใหม่
-        db.query("UPDATE user SET password = ? WHERE user_id = ?", [newPassword, user_id], (err) => {
+        db.query("UPDATE user SET password = ? WHERE user_id = ?", [hashedPassword, user_id], (err) => {
             if (err) return res.status(500).json({ message: "Update Error" });
             res.json({ message: "เปลี่ยนรหัสผ่านสำเร็จ!" });
         });
     });
 };
 
+//ตรวจสอบ OTP/Token เพื่อยืนยันอีเมลของผู้ใช้ แล้วเปลี่ยนสถานะผู้ใช้เป็นยืนยันตัวตนแล้ว (is_verified = 1)
 exports.verifyEmail = (req, res) => {
     const { email, token } = req.body;
     if (!email || !token) return res.status(400).json({ message: "ข้อมูลไม่ครบถ้วน" });

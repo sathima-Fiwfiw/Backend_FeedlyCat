@@ -1,9 +1,8 @@
 const { client, deviceCache } = require('../config/mqtt'); //ดึง client ที่ต่อเน็ตแล้วมาใช้ ดึง cache มาใช้
 const db = require('../config/db');           // ดึงฐานข้อมูลมาใช้
 
-// ------------------------------------------------------------------
 // รับข้อมูลจาก Arduino แล้วเช็คฐานข้อมูลส่งชื่อกลับ
-// ------------------------------------------------------------------
+
 client.on('message', (topic, message) => {
 
     //อัปเดตเวลาล่าสุดที่ได้รับข้อความจากเครื่องนี้
@@ -81,7 +80,6 @@ client.on('message', (topic, message) => {
                 if (!global.deviceCache) global.deviceCache = {};
                 
                 //  บันทึกลงตัวแปร Global (รวม water_low ที่ Arduino ส่งมาจากเซนเซอร์ XKC-Y25V)
-                //  ใช้ ...global.deviceCache[deviceId] เพื่อไม่ให้ lastSeen ที่เพิ่งเซ็ตด้านบนหาย
                 global.deviceCache[deviceId] = {
                     ...global.deviceCache[deviceId],
                     tank_weight: data.tank_weight,
@@ -193,13 +191,8 @@ client.on('message', (topic, message) => {
     }
 });
 
-
 //แจ้งเตือนอาหารใกล้หมด 
-//  เช็คเกณฑ์แจ้งเตือนอาหารใกล้หมด (เทียบน้ำหนักถังกับค่าที่ตั้งไว้ในหน้าแอป)
-// เรียกทุกครั้งที่ได้รับ /status จาก Arduino (ทุก ~5 วินาที)
-
 // เก็บสถานะ "แจ้งเตือนไปแล้วหรือยัง" ของแต่ละเครื่องไว้ใน RAM
-// เพื่อไม่ให้สร้าง notification ซ้ำทุก 5 วินาทีตราบใดที่น้ำหนักยังต่ำกว่าเกณฑ์อยู่
 if (!global.lowFoodAlerted) global.lowFoodAlerted = {};
 
 function checkLowFoodAlert(deviceId, tankWeight) {
@@ -238,10 +231,7 @@ function checkLowFoodAlert(deviceId, tankWeight) {
 }
 
 // เช็คสถานะน้ำใกล้หมด (จากเซนเซอร์ XKC-Y25V ที่ Arduino ส่งมาเป็น water_low: true/false)
-// เรียกทุกครั้งที่ได้รับ /status จาก Arduino (ทุก ~5 วินาที) เหมือนกับของอาหาร
-
 // เก็บสถานะ "แจ้งเตือนไปแล้วหรือยัง" ของแต่ละเครื่องไว้ใน RAM
-// เพื่อไม่ให้สร้าง notification ซ้ำทุก 5 วินาทีตราบใดที่น้ำยังใกล้หมดอยู่
 if (!global.lowWaterAlerted) global.lowWaterAlerted = {};
 
 function checkLowWaterAlert(deviceId, waterLow) {

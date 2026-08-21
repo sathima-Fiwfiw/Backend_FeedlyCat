@@ -5,14 +5,14 @@ require('dotenv').config();
 const express = require('express');
 const cors = require('cors');
 
-// ✅ เพิ่มไลบรารีสำหรับจัดการเวลา
+//เพิ่มไลบรารีสำหรับจัดการเวลา
 const cron = require('node-cron');
 const moment = require('moment-timezone');
 
-// ✅ เรียกใช้ไฟล์ MQTT โดยดึงมาทั้ง client และ sendCommand
+//เรียกใช้ไฟล์ MQTT โดยดึงมาทั้ง client และ sendCommand
 const { client: mqttClient, sendCommand } = require('./config/mqtt');
 
-// ✅ เรียกใช้ฐานข้อมูลสำหรับ Query หาเวลา
+//เรียกใช้ฐานข้อมูลสำหรับ Query หาเวลา
 const db = require('./config/db');
 
 require('./iot/mqttHandler'); // เรียกใช้ Handler ที่เราสร้างไว้เพื่อจัดการข้อมูลจาก Arduino
@@ -48,7 +48,7 @@ app.get('/test-feed', (req, res) => {
 });
 
 // ---------------------------------------------------------
-// ✅ ระบบตั้งเวลาให้อาหารอัตโนมัติ (Scheduler)
+// ระบบตั้งเวลาให้อาหารอัตโนมัติ (Scheduler)
 // ทำงานทุกๆ 1 นาที (เวลาไทย)
 // ---------------------------------------------------------
 cron.schedule('* * * * *', () => {
